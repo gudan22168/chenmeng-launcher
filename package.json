@@ -20,9 +20,12 @@
   },
   "dependencies": {
     "@fontsource/jetbrains-mono": "^5.2.0",
+    "@xmcl/core": "2.16.3",
+    "@xmcl/installer": "6.3.7",
     "adm-zip": "^0.5.16",
     "lucide-vue-next": "^0.468.0",
-    "vue": "^3.5.0"
+    "vue": "^3.5.0",
+    "@xmcl/unzip": "2.1.2"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.0",
@@ -34,11 +37,27 @@
   "build": {
     "appId": "studio.chenmeng.launcher",
     "productName": "尘梦启动器",
-    "directories": { "output": "release" },
-    "files": ["dist/**/*", "electron/**/*", "package.json", "LICENSE"],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      "LICENSE"
+    ],
     "asar": true,
-    "win": { "target": "portable", "icon": "public/icon.ico", "signAndEditExecutable": false },
+    "win": {
+      "target": "portable",
+      "icon": "public/icon.ico",
+      "signAndEditExecutable": false
+    },
     "artifactName": "ChenMeng-Launcher-${version}-${arch}.${ext}",
-    "portable": { "artifactName": "ChenMeng-Launcher-${version}-portable.exe" }
+    "portable": {
+      "artifactName": "ChenMeng-Launcher-${version}-portable.exe"
+    }
+  },
+  "overrides": {
+    "@xmcl/unzip": "2.1.2"
   }
 }

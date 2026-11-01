@@ -9,6 +9,10 @@ This project is under active development. Microsoft sign-in and Xbox authorizati
 ## 当前功能
 
 - 原版游戏版本选择、文件校验、下载进度与游戏启动。
+- 新建实例时选择 Fabric、Forge 或 NeoForge 及其版本，随游戏一起安装。
+- Modrinth 内容搜索按当前游戏版本筛选，模组与整合包同时匹配加载器；安装必需依赖并校验文件。
+- .mrpack 整合包导入与可选内容导出，支持模组、资源包、光影、配置、存档和截图。
+- 窗口缩小时逐级精简首页，最小化为带账户和启动按钮的迷你布局。
 - 实例创建、切换、移除，以及存档、模组、截图等目录快捷访问。
 - Java 检测、内存分配、版本隔离、启动后隐藏窗口与游戏标题设置。
 - 游戏截图或自选图片封面。
@@ -46,7 +50,7 @@ The Windows runtime has received the most testing. Desktop interaction, account 
 ## Planned work
 
 - Complete Minecraft service approval and verify online sign-in, renewal and gameplay.
-- Add Modrinth discovery, compatible content installation, and modpack import/export.
+- Broaden Forge/NeoForge installation and desktop interaction testing.
 - Add world backups and improve launch diagnostics.
 
 Project feedback can be submitted through this repository's Issues.
@@ -54,3 +58,22 @@ Project feedback can be submitted through this repository's Issues.
 ChenMeng is an independent community project and is not affiliated with or endorsed by Mojang or Microsoft. Minecraft belongs to its respective owners.
 
 Source license is MIT, as provided in LICENSE.
+
+
+## Content installation and modpacks
+
+Content Workshop searches the official Modrinth API. Mods and modpacks are filtered by both the selected Minecraft version and loader. Resource packs and shaders are filtered by game version. Shaders also require a compatible shader loader in the instance.
+
+Required Modrinth dependencies are resolved recursively. Conflicting versions and declared incompatibilities stop installation. New files are staged before being copied into the instance; a failed operation rolls back newly added files. Managed content can be moved to the recycle bin after a confirmation.
+
+Modrinth .mrpack imports create a separate isolated instance. The importer applies client overrides, skips server-only files, and asks whether to include optional client files. Unsupported pack loaders are rejected explicitly. Failed download/install tasks can be retried from Downloads.
+
+Exports allow selecting mods, resource packs, shaders, configuration, options.txt, saves, and screenshots. Unchanged managed files are represented by download URLs and hashes; other selected local files are included as overrides. Export size is limited to 1 GiB and archive extraction to 2 GiB. Review selected local files before distributing an exported pack.
+
+## Download sources and validation
+
+Vanilla files use Mojang/Minecraft distribution endpoints. Modrinth uses its official API and CDN. Fabric uses Fabric Meta and Maven; Forge and NeoForge use their official Maven repositories. There is currently no mirror selector. Transfer speed depends on the user's network and the upstream service.
+
+Fabric 1.21.1 with loader 0.16.10 has passed a real dependency download and launch-argument generation check. Full game-window verification for all loaders remains pending. NeoForge's official repository returned connection resets in the development environment. Forge and NeoForge processor execution also requires a compatible locally installed Java runtime.
+
+XMCL installer/core dependencies are pinned. The unzip dependency is pinned to 2.1.2 because the 2.2.0 published package references missing TypeScript sources and a workspace dependency.

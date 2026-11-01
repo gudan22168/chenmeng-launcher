@@ -1,0 +1,48 @@
+<script setup>
+import {ref,onMounted} from 'vue'
+const props=defineProps({instance:Object,busy:Boolean})
+const emit=defineEmits(['task'])
+const api=window.launcher,query=ref(''),type=ref('mod'),hits=ref([]),total=ref(0),offset=ref(0),loading=ref(false),error=ref(''),records=ref([]),choices=ref([]),selected=ref(''),project=ref(null)
+const exportOpen=ref(false),selection=ref(['mods','resourcepacks','shaderpacks','config','options.txt'])
+const categories={mods:'模组',resourcepacks:'资源包',shaderpacks:'光影包',config:'配置', 'options.txt':'游戏选项',saves:'存档',screenshots:'截图'}
+async function act(fn){
+  if(loading.value)return
+  loading.value=true;error.value=''
+  try{await fn()}catch(e){error.value=e.message}finally{loading.value=false}
+}
+async function search(reset=true){
+  if(reset)offset.value=0
+  project.value=null;choices.value=[]
+  const result=await api.contentSearch({query:query.value,type:type.value,offset:offset.value})
+  hits.value=result.hits;total.value=result.total_hits
+}
+async function choose(hit){
+  project.value=hit
+  choices.value=await api.contentVersions(hit.project_id,hit.project_type)
+  selected.value=choices.value[0]?.id || ''
+}
+async function install(){
+  const id=type.value==='modpack'?await api.packDownload(selected.value):await api.contentInstall(selected.value)
+  emit('task',id)
+}
+onMounted(()=>act(async()=>{records.value=await api.contentInstalled();await search()}))
+</script>
+<template>
+<main class="content-page"><small>MODRINTH / CONTENT</small><h2>内容工坊</h2>
+<p>{{instance.name}} · Minecraft {{instance.version}} · {{instance.loader}} {{instance.loaderVersion}}</p>
+<form class="content-search" @submit.prevent="act(()=>search())"><select v-model="type" :disabled="loading" @change="act(()=>search())"><option value="mod">模组</option><option value="resourcepack">资源包</option><option value="shader">光影包</option><option value="modpack">整合包</option></select><input v-model="query" placeholder="搜索 Modrinth" aria-label="搜索内容"><button :disabled="loading">搜索</button></form>
+<small>自动筛选当前游戏版本；模组和整合包同时匹配加载器。光影需安装兼容的光影加载模组。</small>
+<p v-if="instance.loader==='vanilla' && ['mod','modpack'].includes(type)">当前为原版实例。在「实例」中新建 Fabric、Forge 或 NeoForge 实例后即可查找对应模组。</p>
+<div class="content-actions"><button :disabled="loading || busy" @click="act(async()=>emit('task',await api.packImport()))">导入 .mrpack</button><button :disabled="busy" @click="exportOpen=!exportOpen">导出整合包</button></div>
+<section v-if="exportOpen" class="export-panel"><strong>选择导出内容</strong><label v-for="(label,key) in categories" :key="key"><input type="checkbox" :value="key" v-model="selection">{{label}}</label><small>本地文件会随包导出，分享前请确认所选存档、截图和配置适合公开。导出上限 1 GiB。</small><button :disabled="loading || busy || !selection.length" @click="act(async()=>emit('task',await api.packExport(selection)))">选择位置并导出</button></section>
+<p v-if="error" role="alert">{{error}}</p><p v-if="loading">正在读取，请稍候…</p>
+<section v-if="project" class="export-panel"><strong>{{project.title}}</strong><select v-model="selected" aria-label="内容版本"><option v-for="v in choices" :key="v.id" :value="v.id">{{v.name}} · {{v.version_number}}</option></select><small v-if="!choices.length">没有兼容版本。</small><button :disabled="!selected || loading || busy" @click="act(install)">{{type==='modpack'?'下载整合包':'安装并补齐必需依赖'}}</button></section>
+<div class="content-results"><article v-for="hit in hits" :key="hit.project_id"><div><strong>{{hit.title}}</strong><small>{{hit.author}}</small><p>{{hit.description}}</p></div><button :disabled="loading" @click="act(()=>choose(hit))">选择版本</button></article></div>
+<p v-if="!hits.length && !loading">没有找到匹配内容。</p><div class="content-actions"><button :disabled="loading || !offset" @click="act(async()=>{offset=Math.max(0,offset-20);await search(false)})">上一页</button><span>{{offset+1}}–{{offset+hits.length}} / {{total}}</span><button :disabled="loading || offset+hits.length>=total" @click="act(async()=>{offset+=20;await search(false)})">下一页</button></div>
+<h3>已安装的受管理内容</h3><button :disabled="loading" @click="act(async()=>records=await api.contentInstalled())">刷新</button><p v-if="!records.length">尚未通过内容工坊安装。手动放入和整合包内的文件可从实例目录查看。</p>
+<article v-for="record in records" :key="record.projectId"><span>{{record.title}} <small>{{record.path}}</small></span><button :disabled="loading || busy" @click="act(async()=>{await api.contentRemove(record.projectId);records=await api.contentInstalled()})">移除</button></article>
+</main>
+</template>
+<style scoped>
+.content-search,.content-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.content-search input{flex:1;min-width:120px}.content-page small{display:block;color:#756c62}.content-page article{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px dotted #a89986;padding:16px 0}.content-page article>div{min-width:0}.content-page article button{flex-shrink:0}.content-page article p{font-size:13px;line-height:1.6;overflow-wrap:anywhere}.export-panel{display:grid;gap:10px;border:1px dashed #a89986;padding:16px;margin:14px 0}.export-panel input{width:auto}.content-results{margin-top:12px}
+</style>

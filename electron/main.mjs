@@ -7,6 +7,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Store } from './store.mjs'
 
+import {registerContent} from './content-ipc.mjs'
 import {registerJournal} from './journal.mjs'
 const here = path.dirname(fileURLToPath(import.meta.url))
 app.whenReady().then(async () => {
@@ -17,6 +18,7 @@ ipcMain.handle('select', (_, id) => { store.instance(id); store.data.selectedId 
 ipcMain.handle('create', (_, input) => { store.create(input); return store.snapshot() })
 ipcMain.handle('settings', (_, mode) => { store.setSettings({coverMode: mode}); return store.snapshot() })
 ipcMain.handle('options', (_,changes) => {
+  if(gameStatus.busy || queue.snapshot().some(j=>['queued','running','cancelling'].includes(j.status)))throw Error('请等待游戏或任务结束再修改运行设置')
   if(changes.memory !== undefined) store.update(current(),{memory:changes.memory})
   else store.setSettings(changes)
   return store.snapshot()
@@ -53,10 +55,15 @@ ipcMain.handle('cover', async () => {
   return 'data:image/'+ext+';base64,'+(await readFile(file)).toString('base64')
 })
 Menu.setApplicationMenu(null)
-const win = new BrowserWindow({frame:false,autoHideMenuBar:true,backgroundColor:"#F2F0E6",width:1180,height:760,minWidth:760,minHeight:550,webPreferences:{preload:path.join(here,'preload.cjs'),sandbox:true}})
+const win = new BrowserWindow({frame:false,autoHideMenuBar:true,backgroundColor:"#F2F0E6",width:1180,height:760,minWidth:340,minHeight:230,webPreferences:{preload:path.join(here,'preload.cjs'),sandbox:true}})
 ipcMain.handle('windowAction', (event, action) => {
   const target = BrowserWindow.fromWebContents(event.sender)
   if (!target) return
+  if (action === 'expand') {
+    if(target.isMaximized()) target.unmaximize()
+    target.setSize(1180,760)
+    return
+  }
   if (action === 'minimize') target.minimize()
   if (action === 'maximize') target.isMaximized() ? target.unmaximize() : target.maximize()
   if (action === 'close') target.close()
@@ -126,6 +133,7 @@ ipcMain.handle('versions', async () => {
 const queue = new Downloads(() => store.data.settings, (event, data) => {
   if (event === 'jobs' && !win.isDestroyed()) win.webContents.send('jobs', data)
 })
+registerContent({store,queue,ipcMain,dialog,shell,win,isBusy:()=>gameStatus.busy})
 registerJournal({store,ipcMain,shell,dialog,win})
 ipcMain.handle('removeInstance',async(_,id)=>{
   const instance=store.instance(id)
@@ -141,12 +149,20 @@ ipcMain.handle('removeInstance',async(_,id)=>{
   return store.snapshot()
 })
 ipcMain.handle('jobs', () => queue.snapshot())
+ipcMain.handle('retryJob',(_,id)=>{
+  if(gameStatus.busy || queue.snapshot().some(j=>['queued','running','cancelling'].includes(j.status)))throw Error('请等待游戏或任务结束')
+  const job=queue.snapshot().find(j=>j.id===id)
+  if(!job || job.status!=='failed')throw Error('只能重试失败任务')
+  if(job.instanceId)store.instance(job.instanceId)
+  queue.control(id,'resume')
+})
 function enqueue(startGame) {
   const instance = store.instance(current())
   if (signingIn || gameStatus.busy) throw Error('请等待当前游戏退出或启动任务结束')
   if (startGame) status(true,'正在准备 '+instance.name)
   try {
     return queue.add(instance.name+' · '+instance.version, async task => {
+      if(startGame)status(true,'正在准备 '+instance.name)
       try {
         task.progress(0,'检查版本、依赖库和资源索引')
         const plan = await prepare(store,instance,task,startGame ? await launchAccount() : store.data.account)

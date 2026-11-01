@@ -9,3 +9,66 @@ header::after,footer::before,.intro small::after{content:"";position:absolute;le
 header::after,.intro small::after{bottom:-2px}footer::before{top:-2px}
 .account{border:0;padding:4px;text-align:left}.account-panel{position:absolute;right:3%;top:calc(2.3% + 48px);z-index:4;width:270px;background:#f2f0e6 url('./paper.webp');border:1px solid #98887a;box-shadow:2px 4px 12px #47342926;padding:18px;display:grid;gap:10px}.account-panel label{display:grid;gap:4px}.account-panel small,.downloads small{color:#655d57}.downloads article{max-width:800px;padding:18px 0;border-bottom:1px dotted #978575;display:grid;grid-template-columns:1fr auto;gap:10px}.downloads article small,.track{grid-column:1/-1}.track{height:8px;background:#ddd5c7;border-radius:4px;overflow:hidden;position:relative}.track i{display:block;height:100%;background:#fe4b5e;transition:width .25s}.working .track:after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 35%,#fff8 50%,transparent 65%);animation:scan 1.6s infinite}@keyframes scan{from{transform:translateX(-100%)}to{transform:translateX(100%)}}@media(prefers-reduced-motion:reduce){.working .track:after{animation:none}}
 .prefs{display:grid;gap:9px;justify-items:start}.prefs small{overflow-wrap:anywhere}.prefs label input[type=checkbox]{width:auto}
+
+/* Progressive window layouts. Breakpoints use the Electron content area. */
+.expand-window{display:none}
+.account-heading{display:flex;align-items:center;justify-content:space-between}
+.account-heading button{border:0;padding:2px}
+.account-panel input{min-width:0;width:100%}
+.account-panel{max-height:calc(100vh - 160px);overflow:auto}
+@media (max-width:1000px), (max-height:620px){
+  #app{--rail:58px;grid-template-rows:52px minmax(0,1fr) 30px}
+  header{padding-left:74px}
+  header img{height:35px}
+  nav{gap:6px;padding:16px 0}
+  nav button{width:38px;flex-shrink:0}
+  .home{padding:24px}
+  .intro em,.world aside{display:none}
+  .world h1{font-size:clamp(26px,4.6vw,48px)}
+  .journey{grid-template-columns:minmax(0,1fr) 180px;gap:12px}
+  .switch{grid-column:1;grid-row:2;padding:0}
+  .launch{grid-column:2;grid-row:1/3;align-self:end}
+  .primary{padding:15px 8px;font-size:26px}
+  .intro small{font-size:11px;letter-spacing:.04em}
+  footer{letter-spacing:0}
+}
+@media (max-width:720px), (max-height:470px){
+  .home .art,.home .intro,.world>small,.launch>small{display:none}
+  .home{justify-content:flex-end;padding:20px}
+  .home .account{top:14px;right:20px}
+  .journey{gap:10px}
+  .world h1{font-size:28px}
+  .meta{font-size:10px;letter-spacing:0}
+  footer>span:first-child{display:none}
+  footer>span:last-child{width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  main:not(.home){padding:20px}
+  main h2{font-size:25px;margin:10px 0}
+  main input,main select{max-width:100%}
+  .prefs{justify-items:stretch}
+  .journal .journal-layout{grid-template-columns:minmax(0,1fr)}
+  .journal .journal-tools{flex-wrap:wrap}
+  .downloads article{grid-template-columns:minmax(0,1fr) auto}
+}
+@media (max-width:480px), (max-height:320px){
+  #app{grid-template-columns:minmax(0,1fr);grid-template-rows:38px minmax(0,1fr) 24px}
+  #app::before,nav{display:none}
+  header{padding-left:12px}
+  header img{height:25px;max-width:140px;object-fit:contain}
+  .controls button{width:32px}
+  .expand-window{display:block}
+  main.home{grid-column:1;padding:14px 18px;gap:10px;justify-content:space-between}
+  .home .account{position:static;align-self:flex-start;padding:0}
+  .account img{width:30px}
+  .account b{font-size:15px}
+  .home .journey{display:flex;align-items:center;gap:12px;width:100%}
+  .world{min-width:0;flex:1}
+  .world h1{font-size:17px;margin:0 0 3px;letter-spacing:0}
+  .meta{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .home .switch{display:none}
+  .launch{flex:0 0 145px}
+  .primary{font-size:21px;padding:12px 6px}
+  footer{grid-column:1;font-size:10px;margin:0 10px}
+  .home .account-panel{position:fixed;inset:42px 10px 26px;width:auto;max-height:none;padding:10px 14px;gap:7px;z-index:10}
+}
+
+nav{min-height:0;overflow-y:auto}nav button{flex-shrink:0}

@@ -36,14 +36,15 @@ export class Store {
     if (!instance) throw new Error('实例不存在 / Instance not found')
     return instance
   }
-  directory(id) { return this.data.settings.isolated ? path.join(this.root, 'instances', this.instance(id).id) : path.join(this.root,'shared') }
+  directory(id) { return (this.data.settings.isolated || this.instance(id).isolated) ? path.join(this.root, 'instances', this.instance(id).id) : path.join(this.root,'shared') }
   create(input) {
     const version = assertText(input.version)
     if (!/^[\w.+-]{1,80}$/.test(version)) throw new Error('版本无效 / Invalid version')
     const loader = input.loader || 'vanilla'
     if (!['vanilla', 'fabric', 'quilt', 'forge', 'neoforge'].includes(loader)) throw new Error('加载器无效 / Invalid loader')
+    if(input.loaderVersion && !/^[\w.+-]{1,80}$/.test(input.loaderVersion))throw Error('加载器版本无效')
     const instance = { id: randomUUID(), name: assertText(input.name), version, loader, loaderVersion: input.loaderVersion || '',
-      memory: 4096, javaPath: '', status: 'new', versionId: '', createdAt: Date.now(), lastPlayed: null, playTime: 0,
+      isolated: !!input.isolated, memory: 4096, javaPath: '', status: 'new', versionId: '', createdAt: Date.now(), lastPlayed: null, playTime: 0,
       coverMode: 'inherit', cover: '', coverImage: '', installed: [] }
     this.data.instances.push(instance)
     this.data.selectedId = instance.id

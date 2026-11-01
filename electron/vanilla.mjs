@@ -4,13 +4,14 @@ import { promises as fs } from 'node:fs'
 import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import AdmZip from 'adm-zip'
+import {prepareLoader} from './loaders.mjs'
 import { getJSON } from './downloads.mjs'
 import { inside, readJSON, hashFile, mapLimit, evaluateRules, javaMajor } from './util.mjs'
 
 const manifestUrl = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json'
 
 export async function prepare(store, instance, task, account=store.data.account) {
-  if (instance.loader !== 'vanilla') throw Error('目前仅支持原版实例')
+  if(instance.packPending)throw Error('整合包尚未完成导入，请从内容页重试导入')
   const root = path.resolve(store.root,'runtime')
   const game = path.resolve(store.directory(instance.id))
   const versionDir = inside(root, 'versions/'+instance.version)
@@ -73,6 +74,7 @@ export async function prepare(store, instance, task, account=store.data.account)
       await fs.writeFile(dest,entry.getData())
     }
   }
+  if(instance.loader!=='vanilla')return prepareLoader(store,instance,meta,task,account,natives)
   instance.status='installed'
   store.save()
 
