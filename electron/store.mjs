@@ -5,7 +5,7 @@ import os from 'node:os'
 import { assertText, playerName, offlineUUID } from './util.mjs'
 
 export const defaultSettings = {
-  language: 'zh', surface: 'paper', background: '#F2F0E6', ink: '#130918', accent: '#FE4B5E',
+  downloadSource:'auto', downloadFallback:true, language: 'zh', surface: 'paper', background: '#F2F0E6', ink: '#130918', accent: '#FE4B5E',
   font: 'Bahnschrift', inputFont: 'JetBrains Mono', fontScale: 100,
   iconStyle: 'pencil', iconWeight: 1.6, customIcon: '',
   coverMode: 'auto', fixedCover: '', watercolor: 65, paperEdge: true,
@@ -72,13 +72,13 @@ export class Store {
       if (!/^#[a-f\d]{6}$/i.test(changes[key])) throw new Error('颜色无效 / Invalid color')
       s[key] = changes[key]
     }
-    for (const [key, values] of Object.entries({ language: ['zh', 'en'], surface: ['paper', 'frosted', 'liquid'], iconStyle: ['pencil', 'clean', 'bold'], coverMode: ['auto', 'fixed', 'default'] })) {
+    for (const [key, values] of Object.entries({ downloadSource:['auto','official','bmclapi'], language: ['zh', 'en'], surface: ['paper', 'frosted', 'liquid'], iconStyle: ['pencil', 'clean', 'bold'], coverMode: ['auto', 'fixed', 'default'] })) {
       if (changes[key] !== undefined) { if (!values.includes(changes[key])) throw new Error('设置无效 / Invalid setting'); s[key] = changes[key] }
     }
     for (const [key, min, max] of [['watercolor', 0, 100], ['fontScale', 85, 115], ['iconWeight', 1, 3], ['downloadLimit', 0, 1024], ['concurrency', 1, 8]]) {
       if (changes[key] !== undefined) { const n = Number(changes[key]); if (!Number.isFinite(n) || n < min || n > max) throw new Error('设置值超出范围 / Setting out of range'); s[key] = n }
     }
-    for (const key of ['paperEdge', 'reducedMotion', 'closeOnLaunch', 'isolated']) if (changes[key] !== undefined) s[key] = !!changes[key]
+    for (const key of ['downloadFallback','paperEdge', 'reducedMotion', 'closeOnLaunch', 'isolated']) if (changes[key] !== undefined) s[key] = !!changes[key]
     if (changes.gameTitle !== undefined) s.gameTitle = String(changes.gameTitle).trim().slice(0,100)
     if (changes.isolated !== undefined) for (const instance of this.data.instances) for (const folder of ['mods','resourcepacks','shaderpacks','saves','screenshots','config']) mkdirSync(path.join(this.directory(instance.id),folder),{recursive:true})
     for (const key of ['font', 'inputFont']) if (changes[key] !== undefined) s[key] = assertText(changes[key], 100)
@@ -93,6 +93,6 @@ export class Store {
   }
   snapshot() {
     const {credential,...visible}=this.data
-    return { ...visible, system: { used: Math.round((os.totalmem()-os.freemem())/1048576), memory: Math.floor(os.totalmem() / 1048576), platform: process.platform, arch: process.arch, dataPath: this.root }, appVersion: '0.1.0' }
+    return { ...visible, system: { used: Math.round((os.totalmem()-os.freemem())/1048576), memory: Math.floor(os.totalmem() / 1048576), platform: process.platform, arch: process.arch, dataPath: this.root }, appVersion: '0.1.1' }
   }
 }

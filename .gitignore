@@ -7,3 +7,5 @@ release/
 test-results/
 *.log
 deliverables/
+
+.minecraft/

@@ -99,3 +99,12 @@ npm run build
 ```
 
 模组测试覆盖手动 JAR、哈希识别、兼容更新、前置、下载/提交失败回滚、过期清单，以及 Vue DOM 中的拖拽暂存和显式应用。DOM 测试不代替 Windows Electron 的资源管理器与真实游戏联调。
+
+
+### 0.1.1 下载与本地数据
+
+- 独立 EXE 默认把启动器配置、游戏运行文件与实例放在 EXE 同目录的 `.minecraft` 下；不会自动迁移原 AppData 数据。`CHENMENG_DATA_DIR` 显式覆盖仍有效，开发测试入口继续使用 `.dev-data`。移动便携版时应同时移动 `.minecraft`。Electron 自身缓存仍可能使用系统用户目录。
+- 设置支持自动（BMCLAPI 优先）、官方优先、BMCLAPI 优先，以及失败回退开关。镜像由 [BMCLAPI](https://bmclapidoc.bangbang93.com/) 提供，覆盖 Minecraft 元数据、资源、库以及 Fabric / Forge / NeoForge 文件；Modrinth 与微软登录保持各自原服务。失败、校验不符会重试并回退，关闭回退后不会换源。
+- 主进程通过 Electron Chromium 网络接口请求，避开 Node Undici 暂停解析器断言路径。没有通过捕获所有未处理异常来掩盖错误。
+- NeoForge 版本筛选支持 26.x 的完整版本前缀；安装仍需对应 Java，并取决于上游安装器兼容性。
+- 自动实例名包含加载器，例如 `26.1-fabric`，重名追加编号，保留手动名称。

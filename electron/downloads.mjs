@@ -1,3 +1,4 @@
+import {sourceURLs,sourceFailed,sourceText,networkFetch} from './sources.mjs'
 import { promises as fs } from 'node:fs'
 import { createWriteStream } from 'node:fs'
 import { once } from 'node:events'
@@ -7,12 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { exists, hashFile, requireHTTPS } from './util.mjs'
 
 export const USER_AGENT = 'ChenMengLauncher/0.1.0 (desktop Minecraft launcher)'
-export async function getJSON(url, signal) {
-  requireHTTPS(url)
-  const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' }, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(60000)]) : AbortSignal.timeout(60000) })
-  if (!response.ok) throw new Error(`请求失败 / Request failed: ${response.status} · ${new URL(url).hostname}`)
-  return response.json()
-}
+export async function getJSON(url, signal) { return sourceText(url,signal,JSON.parse) }
 
 export class Downloads {
   constructor(settings, emit) { this.settings = settings; this.emit = emit; this.jobs = []; this.nextSlot = 0; this.locks = new Set(); this.active = false }
@@ -37,6 +33,7 @@ export class Downloads {
         let last = 0, sampleTime = Date.now(), sampleBytes = job.transferred
         const context = {
           signal: job.controller.signal,
+          connection: message => { job.source=message; this.publish() },
           progress: (percent, stage) => { job.percent = Math.max(0, Math.min(100, percent)); job.stage = stage; this.publish() },
           bytes: (n, total) => {
             job.transferred += n
@@ -95,14 +92,17 @@ export class Downloads {
     await fs.mkdir(path.dirname(destination), { recursive: true })
     const temporary = destination + '.' + randomUUID() + '.part'
     let lastError
-    for (let attempt = 0; attempt < 3; attempt++) {
-      let stream, timeout
+    const candidates=sourceURLs(url,this.settings())
+    for (let attempt = 0; attempt < Math.max(3,candidates.length); attempt++) {
+      const candidate=candidates[attempt%candidates.length]
+      context.connection?.((attempt?'重试 / 换源 · ':'下载源 · ')+new URL(candidate).hostname)
+      let stream, timeout, response
       const idle = new AbortController()
       const resetTimeout = () => { clearTimeout(timeout); timeout = setTimeout(() => idle.abort(new Error('下载连接超时 / Download timed out')), 90000) }
       try {
         context.signal.throwIfAborted()
         resetTimeout()
-        const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.any([context.signal, idle.signal]) })
+        response = await networkFetch(candidate, { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.any([context.signal, idle.signal]) })
         if (!response.ok || !response.body) throw new Error(`下载失败 / Download failed: HTTP ${response.status}`)
         stream = createWriteStream(temporary)
         const streamError = new Promise((_, reject) => stream.once('error', reject))
@@ -123,12 +123,16 @@ export class Downloads {
         stream = null
         if (checks.size && received !== checks.size) throw new Error('文件大小校验失败 / File size mismatch')
         for (const algo of ['sha1', 'sha256', 'sha512']) if (checks[algo] && await hashFile(temporary, algo) !== checks[algo]) throw new Error('文件哈希校验失败 / File checksum mismatch')
+        if(checks.json)JSON.parse(await fs.readFile(temporary,'utf8'))
         await fs.rename(temporary, destination)
         clearTimeout(timeout)
         return
       } catch (error) {
         lastError = error
-        if (stream) { stream.destroy(); await once(stream, 'close').catch(() => {}) }
+        idle.abort()
+        await response?.body?.cancel().catch(()=>{})
+        if(!response || response.status>=500)sourceFailed(candidate)
+        if (stream && !stream.closed) { const closed=once(stream,'close').catch(()=>{}); stream.destroy(); await closed }
         await fs.rm(temporary, { force: true })
         if (context.signal.aborted) throw error
         if (attempt < 2) await delay(500 * (attempt + 1), null, { signal: context.signal })

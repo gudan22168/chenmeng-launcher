@@ -1,3 +1,4 @@
+import {sourceText} from './sources.mjs'
 import path from 'node:path'
 import {promises as fs} from 'node:fs'
 import {execFile} from 'node:child_process'
@@ -16,14 +17,18 @@ export async function loaderVersions(game,loader){
   }
   if(!['forge','neoforge'].includes(loader))throw Error('不支持的加载器')
   const base=loader==='forge'?'https://maven.minecraftforge.net/net/minecraftforge/forge/':'https://maven.neoforged.net/releases/net/neoforged/neoforge/'
-  const response=await fetch(base+'maven-metadata.xml',{headers:{'User-Agent':USER_AGENT},signal:AbortSignal.timeout(30000)}).catch(()=>{throw Error('无法连接 '+loader+' 官方版本源，请检查网络后重试')})
-  if(!response.ok)throw Error('无法读取加载器版本列表')
-  let versions=[...(await response.text()).matchAll(/<version>([^<]+)<\/version>/g)].map(m=>m[1])
+  let versions
+  if(loader==='neoforge'){
+    versions=await sourceText('https://maven.neoforged.net/api/maven/details/releases/net/neoforged/neoforge',undefined,text=>{const data=JSON.parse(text);if(!Array.isArray(data.files))throw Error('NeoForge 版本目录无效');return data.files.filter(f=>f.type==='DIRECTORY').map(f=>f.name)})
+  }else{
+    const xml=await sourceText(base+'maven-metadata.xml',undefined,text=>{if(!text.includes('<version>'))throw Error('版本列表无效');return text})
+    versions=[...xml.matchAll(/<version>([^<]+)<\/version>/g)].map(m=>m[1])
+  }
   if(loader==='forge')versions=versions.filter(v=>v.startsWith(game+'-')).map(v=>v.slice(game.length+1))
   else{
-    const [,minor,patch='0']=game.split('.')
-    if(!game.startsWith('1.'))return []
-    versions=versions.filter(v=>v.startsWith(minor+'.'+patch+'.'))
+    const parts=game.split('.')
+    const prefix=game.startsWith('1.') ? parts[1]+'.'+(parts[2]||'0')+'.' : parts[0]+'.'+parts[1]+'.'+(parts[2]||'0')+'.'
+    versions=versions.filter(v=>v.startsWith(prefix))
   }
   return versions.sort((a,b)=>b.localeCompare(a,undefined,{numeric:true}))
 }
@@ -49,7 +54,7 @@ export async function prepareLoader(store,instance,base,task,account,natives){
       let last
       for(const url of f.urls){
         try{
-          await task.download(url,f.path,{size:f.size>0?f.size:undefined,...(checksum?{[checksum.algorithm]:checksum.value}:{})})
+          await task.download(url,f.path,{json:f.validator==='json',size:f.size>0?f.size:undefined,...(checksum?{[checksum.algorithm]:checksum.value}:{})})
           last=null;break
         }catch(e){last=e}
       }
@@ -72,9 +77,7 @@ export async function prepareLoader(store,instance,base,task,account,natives){
     const artifact=forge?instance.version+'-'+instance.loaderVersion:instance.loaderVersion
     const relative=(forge?'net/minecraftforge/forge/':'net/neoforged/neoforge/')+artifact+'/'+(forge?'forge':'neoforge')+'-'+artifact+'-installer.jar'
     const url=(forge?'https://maven.minecraftforge.net/':'https://maven.neoforged.net/releases/')+relative
-    const response=await fetch(url+'.sha1',{signal:AbortSignal.timeout(30000)})
-    const sha=(await response.text()).trim().split(/\s/)[0]
-    if(!response.ok || !/^[a-f0-9]{40}$/i.test(sha))throw Error('无法校验加载器安装器')
+    const sha=await sourceText(url+'.sha1',task.signal,text=>{const value=text.trim().split(/\s/)[0];if(!/^[a-f0-9]{40}$/i.test(value))throw Error('安装器校验值无效');return value})
     workflow=createModernForgeInstallWorkflow({
       id:instance.loader+'-'+artifact,minecraft:mc,minecraftVersion:instance.version,artifactVersion:artifact,
       installer:{path:inside(root,'libraries/'+relative),urls:[url],checksum:{algorithm:'sha1',value:sha}},

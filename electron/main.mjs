@@ -1,7 +1,9 @@
+import {configureNetwork} from './sources.mjs'
+import {dataRoot} from './data-root.mjs'
 import { Downloads, getJSON } from './downloads.mjs'
 import { prepare, launch, detectJava, checkJava } from './vanilla.mjs'
 import {deviceCode,redeem,renew,minecraftSession} from './microsoft.mjs'
-import { clipboard, safeStorage, app, BrowserWindow, Menu, dialog, ipcMain, shell } from 'electron'
+import { net, clipboard, safeStorage, app, BrowserWindow, Menu, dialog, ipcMain, shell } from 'electron'
 import { readdir, readFile, stat, copyFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -11,7 +13,9 @@ import {registerContent} from './content-ipc.mjs'
 import {registerJournal} from './journal.mjs'
 const here = path.dirname(fileURLToPath(import.meta.url))
 app.whenReady().then(async () => {
-const store = new Store(process.env.CHENMENG_DATA_DIR || app.getPath('userData'))
+globalThis.fetch = net.fetch.bind(net)
+const store = new Store(dataRoot({override:process.env.CHENMENG_DATA_DIR,portable:process.env.PORTABLE_EXECUTABLE_DIR,packaged:app.isPackaged,executable:app.getPath('exe'),project:app.getAppPath()}))
+configureNetwork({settings:()=>store.data.settings})
 const current = () => store.data.selectedId
 ipcMain.handle('state', () => store.snapshot())
 ipcMain.handle('select', (_, id) => { store.instance(id); store.data.selectedId = id; store.save(); return store.snapshot() })
