@@ -1,0 +1,7 @@
+const {contextBridge,ipcRenderer} = require('electron')
+contextBridge.exposeInMainWorld('launcher', Object.fromEntries(['microsoft','journalList','journalPhoto','journalSave','journalReveal','journalExport','removeInstance','options','offline','versions','jobs','install','windowAction','play','java','gameStatus','state','select','create','settings','choose','cover','folder'].map(name=>[name,(...args)=>ipcRenderer.invoke(name,...args)])))
+
+contextBridge.exposeInMainWorld('onGameStatus',callback=>ipcRenderer.on('game-status',(_,value)=>callback(value)))
+
+
+contextBridge.exposeInMainWorld('onJobs', callback => ipcRenderer.on('jobs', (_, jobs) => callback(jobs)))
