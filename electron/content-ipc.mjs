@@ -1,7 +1,7 @@
 import path from 'node:path'
 import {promises as fs} from 'node:fs'
 import {randomUUID} from 'node:crypto'
-import {searchContent,versions,installContent,installed,setInstalled,modrinth,safeTarget,downloadURL} from './content.mjs'
+import {searchContent,versions,packCompatible,installContent,installed,setInstalled,modrinth,safeTarget,downloadURL} from './content.mjs'
 import {inspectPack,unpackPack,exportPack} from './packs.mjs'
 import {loaderVersions} from './loaders.mjs'
 import {getJSON} from './downloads.mjs'
@@ -63,7 +63,7 @@ export function registerContent({store,queue,ipcMain,dialog,shell,win,isBusy}){
     idle()
     const instance=current()
     const version=await getJSON(modrinth+'/version/'+encodeURIComponent(versionId))
-    if(!version.game_versions.includes(instance.version) || !version.loaders.includes(instance.loader))throw Error('整合包不匹配当前版本或加载器')
+    if(!packCompatible(version,instance))throw Error('整合包不匹配当前版本或加载器')
     const file=version.files.find(f=>f.primary) || version.files[0]
     if(!file.filename.endsWith('.mrpack'))throw Error('该文件不是 mrpack')
     const dest=path.join(store.root,'packs',randomUUID()+'.mrpack')

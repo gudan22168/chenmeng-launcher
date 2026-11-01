@@ -10,15 +10,24 @@ export function compatible(version,instance,type){
   return version.game_versions.includes(instance.version) &&
     (type!=='mod' && type!=='modpack' || version.loaders.includes(instance.loader))
 }
+export function browseLoader(instance,type){
+  return ['mod','modpack'].includes(type) && instance.loader !== 'vanilla'
+}
+export function packCompatible(version,instance){
+  return version.game_versions.includes(instance.version) && (instance.loader === 'vanilla'
+    ? version.loaders.some(loader=>['fabric','forge','neoforge'].includes(loader))
+    : version.loaders.includes(instance.loader))
+}
 export async function versions(project,instance,type){
   const params=new URLSearchParams({game_versions:JSON.stringify([instance.version])})
-  if(['mod','modpack'].includes(type))params.set('loaders',JSON.stringify([instance.loader]))
-  return getJSON(modrinth+'/project/'+encodeURIComponent(project)+'/version?'+params)
+  if(browseLoader(instance,type))params.set('loaders',JSON.stringify([instance.loader]))
+  const result=await getJSON(modrinth+'/project/'+encodeURIComponent(project)+'/version?'+params)
+  return type==='modpack'?result.filter(v=>packCompatible(v,instance)):result
 }
 export async function searchContent(instance,{query='',type='mod',offset=0}){
   if(!['mod','resourcepack','shader','modpack'].includes(type))throw Error('内容类型无效')
   const facets=[['project_type:'+type],['versions:'+instance.version]]
-  if(['mod','modpack'].includes(type))facets.push(['categories:'+instance.loader])
+  if(browseLoader(instance,type))facets.push(['categories:'+instance.loader])
   return getJSON(modrinth+'/search?'+new URLSearchParams({query:String(query).slice(0,120),facets:JSON.stringify(facets),limit:'20',offset:String(Math.max(0,Number(offset)||0))}))
 }
 export function installed(store,instance){
@@ -60,7 +69,7 @@ export async function resolveContent(instance,versionId,existing=[]){
     if(!file?.hashes?.sha512)throw Error('内容缺少完整性校验')
     const relative=contentFolders[type]+'/'+file.filename
     inside('/validation',relative)
-    const record={projectId:version.project_id,versionId:version.id,title:project.title,type,path:relative,hashes:file.hashes,size:file.size,url:downloadURL(file.url),dependencies:[]}
+    const record={projectId:version.project_id,versionId:version.id,title:project.title,icon_url:project.icon_url,type,path:relative,hashes:file.hashes,size:file.size,url:downloadURL(file.url),dependencies:[]}
     result.set(version.project_id,record)
     for(const dep of version.dependencies || []){
       if(dep.dependency_type==='incompatible'){
