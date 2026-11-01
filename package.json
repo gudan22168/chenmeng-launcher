@@ -51,7 +51,7 @@
     "win": {
       "target": "portable",
       "icon": "public/icon.ico",
-      "signAndEditExecutable": false
+      "signAndEditExecutable": true
     },
     "artifactName": "ChenMeng-Launcher-${version}-${arch}.${ext}",
     "portable": {

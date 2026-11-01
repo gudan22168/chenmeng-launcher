@@ -1,3 +1,4 @@
+import {pathToFileURL} from 'node:url'
 import assert from 'node:assert/strict'
 import {readFile,writeFile,mkdtemp,rm} from 'node:fs/promises'
 import {parse,compileScript} from '@vue/compiler-sfc'
@@ -17,7 +18,7 @@ const temporary=await mkdtemp(new URL('./.vue-test-',import.meta.url))
 const compiledFile=temporary+'/compiled.mjs'
 await writeFile(compiledFile,compiled.content)
 try{
- const {createApp,nextTick}=await import('vue'),{default:Component}=await import(compiledFile)
+ const {createApp,nextTick}=await import('vue'),{default:Component}=await import(pathToFileURL(compiledFile).href)
  const root=document.createElement('div');document.body.append(root)
  const app=createApp(Component,{instance:{id:'test',version:'1.21.1',loader:'fabric'},filter:{version:'1.21.1',loader:'fabric'},hits:[{project_id:'remote',title:'Remote Mod'},{project_id:'local',title:'Local Mod'}],total:2,offset:0,busy:false})
  app.mount(root)
