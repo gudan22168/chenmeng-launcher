@@ -24,11 +24,19 @@ export async function versions(project,instance,type){
   const result=await getJSON(modrinth+'/project/'+encodeURIComponent(project)+'/version?'+params)
   return type==='modpack'?result.filter(v=>packCompatible(v,instance)):result
 }
-export async function searchContent(instance,{query='',type='mod',offset=0}){
+export async function searchContent(instance,{query='',type='mod',offset=0,version=instance.version,loader=instance.loader,category=''}){
   if(!['mod','resourcepack','shader','modpack'].includes(type))throw Error('内容类型无效')
+  instance=browseContext(instance,{version,loader})
+  if(category && !/^[a-z0-9-]{1,60}$/.test(category))throw Error('分类无效')
   const facets=[['project_type:'+type],['versions:'+instance.version]]
+  if(category)facets.push(['categories:'+category])
   if(browseLoader(instance,type))facets.push(['categories:'+instance.loader])
   return getJSON(modrinth+'/search?'+new URLSearchParams({query:String(query).slice(0,120),facets:JSON.stringify(facets),limit:'20',offset:String(Math.max(0,Number(offset)||0))}))
+}
+export function browseContext(instance,filter={}){
+  const version=filter.version || instance.version,loader=filter.loader || instance.loader
+  if(!/^[\w.+-]{1,80}$/.test(version)||!['vanilla','fabric','forge','neoforge','quilt'].includes(loader))throw Error('筛选条件无效')
+  return {...instance,version,loader}
 }
 export function installed(store,instance){
   return store.data.settings.isolated || instance.isolated ? (instance.installed ||= []) : (store.data.sharedInstalled ||= [])
@@ -52,7 +60,7 @@ export function downloadURL(url){
   if(!['cdn.modrinth.com','github.com','raw.githubusercontent.com','gitlab.com'].includes(parsed.hostname))throw Error('整合包包含不支持的下载域名：'+parsed.hostname)
   return parsed.href
 }
-export async function resolveContent(instance,versionId,existing=[]){
+export async function resolveContent(instance,versionId,existing=[],{pins=new Map()}={}){
   const result=new Map(), visiting=new Set(), incompatible=[]
   async function visit(id){
     if(visiting.has(id))return
@@ -69,7 +77,7 @@ export async function resolveContent(instance,versionId,existing=[]){
     if(!file?.hashes?.sha512)throw Error('内容缺少完整性校验')
     const relative=contentFolders[type]+'/'+file.filename
     inside('/validation',relative)
-    const record={projectId:version.project_id,versionId:version.id,title:project.title,icon_url:project.icon_url,type,path:relative,hashes:file.hashes,size:file.size,url:downloadURL(file.url),dependencies:[]}
+    const record={projectId:version.project_id,versionId:version.id,title:project.title,versionNumber:version.version_number,icon_url:project.icon_url,type,path:relative,hashes:file.hashes,size:file.size,url:downloadURL(file.url),dependencies:[]}
     result.set(version.project_id,record)
     for(const dep of version.dependencies || []){
       if(dep.dependency_type==='incompatible'){
@@ -79,6 +87,7 @@ export async function resolveContent(instance,versionId,existing=[]){
       }
       if(dep.dependency_type!=='required')continue
       let depId=dep.version_id
+      if(!depId && dep.project_id)depId=pins.get(dep.project_id)
       if(!depId){
         if(!dep.project_id)throw Error('请手动安装外部依赖：'+(dep.file_name||project.title))
         const p=await getJSON(modrinth+'/project/'+dep.project_id)
@@ -91,7 +100,7 @@ export async function resolveContent(instance,versionId,existing=[]){
       if(resolved)record.dependencies.push(resolved.projectId)
     }
   }
-  await visit(versionId)
+  for(const id of Array.isArray(versionId)?versionId:[versionId])await visit(id)
   const all=[...existing,...result.values()]
   if(incompatible.some(dep=>all.some(e=>dep.version_id?e.versionId===dep.version_id:e.projectId===dep.project_id)))throw Error('内容之间存在不兼容声明，请调整选择')
   return [...result.values()]

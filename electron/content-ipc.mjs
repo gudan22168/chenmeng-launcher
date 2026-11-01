@@ -1,7 +1,8 @@
+import {scanMods,identifyMods,checkMods,fingerprint,planMods,applyModPlan} from './mod-manager.mjs'
 import path from 'node:path'
 import {promises as fs} from 'node:fs'
 import {randomUUID} from 'node:crypto'
-import {searchContent,versions,packCompatible,installContent,installed,setInstalled,modrinth,safeTarget,downloadURL} from './content.mjs'
+import {searchContent,versions,browseContext,packCompatible,installContent,installed,setInstalled,modrinth,safeTarget,downloadURL} from './content.mjs'
 import {inspectPack,unpackPack,exportPack} from './packs.mjs'
 import {loaderVersions} from './loaders.mjs'
 import {getJSON} from './downloads.mjs'
@@ -14,7 +15,46 @@ export function registerContent({store,queue,ipcMain,dialog,shell,win,isBusy}){
   }
   ipcMain.handle('loaderVersions',(_,game,loader)=>loaderVersions(game,loader))
   ipcMain.handle('contentSearch',(_,input)=>searchContent(current(),input))
-  ipcMain.handle('contentVersions',(_,id,type)=>versions(id,current(),type))
+  ipcMain.handle('contentVersions',(_,id,type,filter)=>versions(id,browseContext(current(),filter),type))
+  const plans=new Map()
+  ipcMain.handle('contentFilters',async()=>{
+    const [categories,gameVersions]=await Promise.all([getJSON(modrinth+'/tag/category'),getJSON(modrinth+'/tag/game_version')])
+    return {categories:categories.map(c=>({name:c.name,type:c.project_type})),versions:gameVersions.filter(v=>v.version_type==='release').map(v=>v.version)}
+  })
+  ipcMain.handle('modsList',async(_,id,check=false)=>{
+    const instance=store.instance(id),rows=await scanMods(store,instance)
+    let warning=''
+    try{if(check)await checkMods(rows,instance);else await identifyMods(rows)}catch(e){warning='联网识别未完成：'+e.message}
+    return {rows,snapshot:fingerprint(rows),warning}
+  })
+  ipcMain.handle('modsPlan',async(_,id,input)=>{
+    idle()
+    const instance=store.instance(id),plan=await planMods(store,instance,input)
+    const token=randomUUID()
+    plans.clear();plans.set(token,plan)
+    return {token,changes:plan.changes,remove:plan.remove,warnings:plan.warnings}
+  })
+  ipcMain.handle('modsApply',(_,id,token)=>{
+    idle()
+    const plan=plans.get(token),instance=store.instance(id)
+    if(!plan||plan.instanceId!==id)throw Error('清单已失效，请重新检查')
+    plans.delete(token)
+    return queue.add('应用模组更改 · '+instance.name,task=>applyModPlan(store,instance,plan,task),instance.id)
+  })
+  ipcMain.handle('modReveal',async(_,id,relative)=>{
+    if(typeof relative!=='string'||!/^mods\/[^/]+\.jar(?:\.disabled)?$/i.test(relative))throw Error('模组路径无效')
+    const file=await safeTarget(store.directory(id),relative)
+    await fs.stat(file);shell.showItemInFolder(file)
+  })
+  ipcMain.handle('modLink',async(_,site,title,projectId)=>{
+    const query=encodeURIComponent(String(title).slice(0,160))
+    let url
+    if(site==='curseforge')url='https://www.curseforge.com/minecraft/search?class=mc-mods&search='+query
+    else if(site==='mcmod')url='https://search.mcmod.cn/s?key='+query
+    else if(site==='modrinth' && /^\w{1,80}$/.test(projectId))url='https://modrinth.com/mod/'+projectId
+    else throw Error('网站无效')
+    await shell.openExternal(url)
+  })
   ipcMain.handle('contentInstalled',()=>installed(store,current()))
   ipcMain.handle('contentInstall',(_,versionId)=>{
     idle()

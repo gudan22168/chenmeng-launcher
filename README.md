@@ -77,3 +77,25 @@ Vanilla files use Mojang/Minecraft distribution endpoints. Modrinth uses its off
 Fabric 1.21.1 with loader 0.16.10 has passed a real dependency download and launch-argument generation check. Full game-window verification for all loaders remains pending. NeoForge's official repository returned connection resets in the development environment. Forge and NeoForge processor execution also requires a compatible locally installed Java runtime.
 
 XMCL installer/core dependencies are pinned. The unzip dependency is pinned to 2.1.2 because the 2.2.0 published package references missing TypeScript sources and a workspace dependency.
+
+
+### 模组工作台
+
+内容工坊可按游戏版本、加载器和分类浏览。模组页面采用双栏紧凑列表：左侧是 Modrinth 搜索结果，右侧扫描当前实例的 mods 文件夹（含手动放入的 jar 和 jar.disabled）。已通过哈希识别的本地项目及待添加项目会从左侧隐藏。
+
+- 左侧选择版本后拖入右侧，或使用“加入”；右侧可指定版本、加入更新、暂存移除。此时不下载。草稿按实例保存在当前启动器会话中，退出应用后不保留。
+- “检查更新 / 前置”按文件 SHA-512 识别项目，比较当前游戏版本与加载器对应的最新正式版，并提示缺少的必需依赖。没有 Modrinth 记录的文件仍显示本地元信息，无法自动识别或更新时会明确提示。
+- “检查更改 / 补齐前置”生成可审阅清单；只在点击“应用更改并下载”后下载、校验、替换文件。检查必需依赖、版本约束和已声明的不兼容关系，不保证运行时无冲突。
+- 新文件全部下载成功后才提交更改；替换或移除的旧文件保存在实例的 mod-backups 下。下载失败不改变原模组；提交阶段发生可捕获错误时恢复旧文件。应用前后检查本地文件快照，拒绝覆盖编辑期间被外部修改的文件。
+- 点击名称查看信息，支持打开本地位置和 Modrinth 项目；CurseForge、MC 百科使用明确标注的名称搜索入口，不猜测跨站项目 ID。
+- 浏览其他游戏版本或加载器时禁止添加到当前实例，点击“匹配当前实例”恢复安装条件。
+
+验证：
+
+```sh
+npm ci
+npm test
+npm run build
+```
+
+模组测试覆盖手动 JAR、哈希识别、兼容更新、前置、下载/提交失败回滚、过期清单，以及 Vue DOM 中的拖拽暂存和显式应用。DOM 测试不代替 Windows Electron 的资源管理器与真实游戏联调。
