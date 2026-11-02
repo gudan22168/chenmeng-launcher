@@ -219,4 +219,17 @@ export function registerDiagnostics({store,ipcMain,dialog,shell,win,safeStorage,
       return redact(answerText,[decrypt(config)]).slice(0,30000)
     }finally{aiBusy=false}
   })
+
+  return {runTranslation:async work=>{
+    if(aiBusy)throw Error('AI 请求正在进行中')
+    aiBusy=true
+    try{
+      const config=await readSettings()
+      if(!config.baseURL||!config.model)throw Error('请先在设置中配置 AI 地址和模型')
+      return await work({endpoint:endpoint(config.baseURL),model:config.model,complete:async messages=>{
+        const result=await request('/chat/completions',config,{model:config.model,messages,max_tokens:8192,...(new URL(config.baseURL).hostname==='api.deepseek.com'?{thinking:{type:'disabled'}}:{})})
+        return extractAIAnswer(result)
+      }})
+    }finally{aiBusy=false}
+  }}
 }

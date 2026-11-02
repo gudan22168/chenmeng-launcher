@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { Store } from './store.mjs'
 
 import {registerContent} from './content-ipc.mjs'
+import {registerTranslations} from './translations.mjs'
 import {registerDiagnostics} from './diagnostics.mjs'
 import {registerDirectoryImport} from './directory-import.mjs'
 import {registerJournal} from './journal.mjs'
@@ -142,7 +143,8 @@ const queue = new Downloads(() => store.data.settings, (event, data) => {
 registerContent({store,queue,ipcMain,dialog,shell,win,isBusy:()=>gameStatus.busy})
 registerDirectoryImport({store,queue,ipcMain,dialog,shell,win,isBusy:()=>gameStatus.busy})
 registerJournal({store,ipcMain,shell,dialog,win})
-registerDiagnostics({store,ipcMain,dialog,shell,win,safeStorage,app,getStatus:()=>gameStatus.message})
+const aiService=registerDiagnostics({store,ipcMain,dialog,shell,win,safeStorage,app,getStatus:()=>gameStatus.message})
+registerTranslations({store,ipcMain,dialog,shell,win,ai:aiService,isBusy:()=>gameStatus.busy || queue.snapshot().some(j=>['queued','running','cancelling'].includes(j.status))})
 ipcMain.handle('removeInstance',async(_,id)=>{
   const instance=store.instance(id)
   const check=()=>{if(gameStatus.busy || queue.snapshot().some(j=>j.instanceId===id && !['completed','failed','cancelled'].includes(j.status))) throw Error('请先结束游戏或下载任务')}
