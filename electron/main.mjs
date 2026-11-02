@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { Store } from './store.mjs'
 
 import {registerContent} from './content-ipc.mjs'
+import {registerDiagnostics} from './diagnostics.mjs'
 import {registerDirectoryImport} from './directory-import.mjs'
 import {registerJournal} from './journal.mjs'
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -141,6 +142,7 @@ const queue = new Downloads(() => store.data.settings, (event, data) => {
 registerContent({store,queue,ipcMain,dialog,shell,win,isBusy:()=>gameStatus.busy})
 registerDirectoryImport({store,queue,ipcMain,dialog,shell,win,isBusy:()=>gameStatus.busy})
 registerJournal({store,ipcMain,shell,dialog,win})
+registerDiagnostics({store,ipcMain,dialog,shell,win,safeStorage,app,getStatus:()=>gameStatus.message})
 ipcMain.handle('removeInstance',async(_,id)=>{
   const instance=store.instance(id)
   const check=()=>{if(gameStatus.busy || queue.snapshot().some(j=>j.instanceId===id && !['completed','failed','cancelled'].includes(j.status))) throw Error('请先结束游戏或下载任务')}
@@ -192,7 +194,7 @@ function enqueue(startGame) {
   if (startGame) status(true,'正在准备 '+instance.name)
   try {
     return queue.add(instance.name+' · '+instance.version, async task => {
-      if(startGame)status(true,'正在准备 '+instance.name)
+      if(startGame){delete instance.lastError;status(true,'正在准备 '+instance.name)}
       try {
         task.progress(0,'检查版本、依赖库和资源索引')
         const needsJava=startGame || ['forge','neoforge'].includes(instance.loader)
@@ -200,16 +202,22 @@ function enqueue(startGame) {
         task.progress(100,'游戏文件已就绪')
         if (!startGame) return
         await ensureInstanceJava(instance,plan.major,true)
-        await launch(instance,plan,code => {
+        await launch(instance,plan,(code,signal) => {
+          instance.lastExit={code,signal:signal||null,time:new Date().toISOString()};try{store.save()}catch{}
           if(!win.isDestroyed() && !win.isVisible()) win.show()
-          status(false,code === 0 ? '游戏已退出' : '游戏异常退出，请查看 launcher.log')
+          status(false,code === 0 ? '游戏已退出' : '游戏异常退出，请查看日志与诊断')
+          if(code!==0 && !win.isDestroyed())win.webContents.send('diagnostic-ready',instance.id)
         },store.data.settings.gameTitle)
         if(gameStatus.busy && store.data.settings.closeOnLaunch) win.hide()
         instance.lastPlayed = Date.now()
         store.save()
         if (gameStatus.busy) status(true,'游戏运行中')
       } catch (error) {
-        if (startGame) status(false,'启动失败：'+error.message)
+        if (startGame) {
+          instance.lastError={message:error.message,time:new Date().toISOString()};try{store.save()}catch{}
+          status(false,'启动失败：'+error.message)
+          if(!win.isDestroyed())win.webContents.send('diagnostic-ready',instance.id)
+        }
         throw error
       }
     }, instance.id)

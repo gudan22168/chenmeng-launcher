@@ -10,7 +10,7 @@ let failPlan=true,failApply=true
 window.launcher={
  modsList:async()=>({rows:[{projectId:'local',title:'Local Mod',localVersion:'1',latest:{id:'l2',number:'2'},updateAvailable:true,path:'mods/local.jar'}],snapshot:'test',warning:''}),
  contentVersions:async(...args)=>{structuredClone(args);return [{id:'v1',version_number:'1.0',version_type:'release'}]},
- modsPlan:async(id,input)=>{structuredClone(input);calls.push(['plan',input]);if(failPlan){failPlan=false;throw Error('依赖服务暂时不可用')}return {token:'token',changes:[{projectId:'remote',title:'Remote Mod',versionNumber:'1.0',action:'新增'},{projectId:'dep',title:'Required API',versionNumber:'2',action:'新增',automatic:true}],remove:[],warnings:[]}},
+ modsPlan:async(id,input)=>{structuredClone(input);calls.push(['plan',input]);if(failPlan){failPlan=false;throw Error('[DEPENDENCY_UNRESOLVED] 缺少前置')}return {token:'token',changes:[{projectId:'remote',title:'Remote Mod',versionNumber:'1.0',action:'新增'},{projectId:'dep',title:'Required API',versionNumber:'2',action:'新增',automatic:true}],remove:[],warnings:[]}},
  modsApply:async()=>{calls.push(['apply']);if(failApply){failApply=false;throw Error('本地文件已变化，请重新检查')}return 'job'},modLink:async()=>{},modReveal:async()=>{}
 }
 const source=await readFile('src/ModManager.vue','utf8'),{descriptor}=parse(source)
@@ -37,10 +37,11 @@ try{
  assert(root.querySelectorAll('.mod-pane')[1].textContent.includes('待新增'))
  button('检查并下载（1）').click();await flush()
  assert(document.querySelector('dialog').open,'checking opens visible confirmation dialog')
- assert(document.querySelector('dialog [role=alert]').textContent.includes('依赖服务暂时不可用'))
+ assert(document.querySelector('dialog [role=alert]').textContent.includes('[DEPENDENCY_UNRESOLVED] 缺少前置'))
  assert.equal(calls.filter(c=>c[0]==='apply').length,0)
  assert(root.querySelector('.pending'),'failed checks preserve staged changes')
- button('重新检查').click();await flush()
+ button('忽略前置，生成仅下载所选模组的清单').click();await flush()
+ assert.equal(calls.filter(c=>c[0]==='plan').at(-1)[1].dependencyMode,'selected-only')
  assert(root.querySelectorAll('.mod-pane')[1].textContent.includes('Required API'))
  assert.equal(calls.filter(c=>c[0]==='apply').length,0,'checking never downloads')
  assert(!button('确认下载并应用更改').disabled)

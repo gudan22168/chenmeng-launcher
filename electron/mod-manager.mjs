@@ -65,6 +65,8 @@ export async function checkMods(rows,instance){
 export function fingerprint(rows){return JSON.stringify(rows.map(r=>[r.path,r.hash]).sort((a,b)=>a[0].localeCompare(b[0])))}
 export async function planMods(store,instance,input){
   if(!Array.isArray(input.versions)||!Array.isArray(input.remove)||input.versions.length>300||input.remove.length>1000)throw Error('更改清单无效')
+  const dependencyMode=input.dependencyMode || 'resolve'
+  if(!['resolve','selected-only'].includes(dependencyMode))throw Error('依赖处理方式无效')
   const before=await identifyMods(await scanMods(store,instance))
   if(input.snapshot!==fingerprint(before))throw Error('本地模组已变化，请刷新后重新编辑')
   const remove=new Set(input.remove)
@@ -78,8 +80,8 @@ export async function planMods(store,instance,input){
   for(const v of selected){if(pins.has(v.project_id)&&pins.get(v.project_id)!==v.id)throw Error('同一模组选中了不同版本');pins.set(v.project_id,v.id)}
   const retained=before.filter(r=>!remove.has(r.path)&&!r.disabled&&r.projectId&&!pins.has(r.projectId))
   for(const r of retained){if(pins.has(r.projectId)&&pins.get(r.projectId)!==r.versionId)throw Error('本地存在同一模组的多个版本，请先选择移除');pins.set(r.projectId,r.versionId)}
-  const roots=[...pins.values()]
-  const resolved=roots.length?await resolveContent(instance,roots,[],{pins}):[]
+  const roots=dependencyMode==='selected-only'?selected.map(v=>v.id):[...pins.values()]
+  const resolved=roots.length?await resolveContent(instance,roots,[],{pins,dependencyMode}):[]
   if(resolved.some(r=>r.type!=='mod'||!/^mods\/[^/]+\.jar$/i.test(r.path)))throw Error('该操作仅支持模组，其他类型请使用内容工坊')
   const changes=[],affected=new Set(remove)
   for(const r of resolved){
@@ -98,7 +100,7 @@ export async function planMods(store,instance,input){
       if(!affected.has(r.path))throw Error('已有同名本地文件，不能覆盖：'+r.path)
     }
   }
-  return {instanceId:instance.id,gameVersion:instance.version,loader:instance.loader,root:store.directory(instance.id),snapshot:fingerprint(before),before,changes,remove:[...affected],warnings:before.filter(r=>!r.projectId&&!remove.has(r.path)).map(r=>r.title+'：未识别，无法自动检查前置或冲突')}
+  return {instanceId:instance.id,gameVersion:instance.version,loader:instance.loader,root:store.directory(instance.id),snapshot:fingerprint(before),before,changes,remove:[...affected],warnings:[...(dependencyMode==='selected-only'?['已跳过必需前置解析，仅下载你选定的模组；请自行确认内置前置或手动补齐。游戏版本、加载器和文件校验仍执行。']:[]),...before.filter(r=>!r.projectId&&!remove.has(r.path)).map(r=>r.title+'：未识别，无法自动检查前置或冲突')]}
 }
 export async function applyModPlan(store,instance,plan,task){
   const root=store.directory(instance.id)

@@ -60,7 +60,7 @@ export function downloadURL(url){
   if(!['cdn.modrinth.com','github.com','raw.githubusercontent.com','gitlab.com'].includes(parsed.hostname))throw Error('整合包包含不支持的下载域名：'+parsed.hostname)
   return parsed.href
 }
-export async function resolveContent(instance,versionId,existing=[],{pins=new Map()}={}){
+export async function resolveContent(instance,versionId,existing=[],{pins=new Map(),dependencyMode='resolve'}={}){
   const result=new Map(), visiting=new Set(), incompatible=[]
   async function visit(id){
     if(visiting.has(id))return
@@ -86,17 +86,18 @@ export async function resolveContent(instance,versionId,existing=[],{pins=new Ma
         continue
       }
       if(dep.dependency_type!=='required')continue
+      if(dependencyMode==='selected-only')continue
       let depId=dep.version_id
       let depTitle=dep.project_id || dep.file_name || '未知前置'
       if(!depId && dep.project_id)depId=pins.get(dep.project_id)
       if(!depId){
-        if(!dep.project_id)throw Error('请手动安装外部依赖：'+(dep.file_name||project.title))
+        if(!dep.project_id)throw Error('[DEPENDENCY_UNRESOLVED] 请手动安装外部依赖：'+(dep.file_name||project.title))
         const p=await getJSON(modrinth+'/project/'+dep.project_id)
         depTitle=p.title || dep.project_id
         const choices=await versions(dep.project_id,instance,p.project_type)
         depId=choices[0]?.id
       }
-      if(!depId)throw Error(project.title+' '+version.version_number+' 需要前置「'+depTitle+'」，但 Modrinth 未返回适用于 Minecraft '+instance.version+' / '+instance.loader+' 的版本。请调整该模组版本或检查前置项目支持的版本。')
+      if(!depId)throw Error('[DEPENDENCY_UNRESOLVED] '+project.title+' '+version.version_number+' 需要前置「'+depTitle+'」，但 Modrinth 未返回适用于 Minecraft '+instance.version+' / '+instance.loader+' 的版本。请调整该模组版本或检查前置项目支持的版本。')
       await visit(depId)
       const resolved=[...result.values()].find(r=>r.versionId===depId)
       if(resolved)record.dependencies.push(resolved.projectId)

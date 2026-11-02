@@ -109,6 +109,7 @@ export async function launch(instance, plan, onExit,title) {
   const {stderr,stdout} = await promisify(execFile)(java,['-version'],{windowsHide:true,timeout:10000})
   const major = Number((stderr+stdout).match(/version "(?:1\.)?(\d+)/)?.[1])
   if (major !== plan.major) throw Error('此实例需要 Java '+plan.major+'，当前检测到 '+(major||'未知版本')+'。请在实例页选择 Java。')
+  await fs.copyFile(path.join(plan.cwd,'launcher.log'),path.join(plan.cwd,'launcher.previous.log')).catch(error=>{if(error.code!=='ENOENT')throw error})
   const log = await fs.open(path.join(plan.cwd,'launcher.log'),'w')
   try {
     const child = spawn(java,plan.args,{cwd:plan.cwd,windowsHide:true,stdio:['ignore',log.fd,log.fd]})
