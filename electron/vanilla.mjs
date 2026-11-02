@@ -27,6 +27,8 @@ export async function prepare(store, instance, task, account=store.data.account)
   }
   const meta = await readJSON(metadata)
   if (!meta.arguments || !meta.downloads?.client) throw Error('此版本使用旧启动格式，目前请选择 1.21.1 等现代原版')
+  // Check before loader installation: Forge processors need Java too.
+  if (task.ensureJava) await task.ensureJava(javaMajor(meta))
   const assets = path.join(root,'assets')
   const libs = path.join(root,'libraries')
   const natives = path.join(versionDir,'natives')

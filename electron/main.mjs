@@ -160,6 +160,30 @@ ipcMain.handle('retryJob',(_,id)=>{
   if(job.instanceId)store.instance(job.instanceId)
   queue.control(id,'resume')
 })
+async function ensureInstanceJava(instance, major, startGame) {
+  if (instance.javaPath && await checkJava(instance.javaPath, major)) return
+  const response = await dialog.showMessageBox(win, {
+    type:'question',
+    message:instance.javaPath ? '当前 Java 无法使用或版本不匹配' : '此实例尚未配置 Java',
+    detail:'此版本需要 Java '+major+'。可自动查找本机已安装的兼容版本，配置后继续'+(startGame?'启动游戏。':'安装加载器。'),
+    buttons:[startGame?'自动配置并启动':'自动配置并继续安装','手动选择 Java','取消'],
+    defaultId:0,cancelId:2
+  })
+  let java
+  if (response.response===0) java=await detectJava(major)
+  else if (response.response===1) {
+    const picked=await dialog.showOpenDialog(win,{properties:['openFile'],filters:[{name:'Java',extensions:['exe']}]})
+    if (!picked.canceled) java=picked.filePaths[0]
+    else throw Error('已取消 Java 配置')
+  } else throw Error('已取消 Java 配置')
+  if (!java || !await checkJava(java,major)) {
+    const message='未找到可用的 Java '+major+'。请安装对应版本后重试，或在实例页手动选择 Java。'
+    await dialog.showMessageBox(win,{type:'warning',message,buttons:['知道了']})
+    throw Error(message)
+  }
+  store.update(instance.id,{javaPath:java})
+  instance.javaPath=java
+}
 function enqueue(startGame) {
   const instance = store.instance(current())
   if (signingIn || gameStatus.busy) throw Error('请等待当前游戏退出或启动任务结束')
@@ -169,16 +193,11 @@ function enqueue(startGame) {
       if(startGame)status(true,'正在准备 '+instance.name)
       try {
         task.progress(0,'检查版本、依赖库和资源索引')
-        const plan = await prepare(store,instance,task,startGame ? await launchAccount() : store.data.account)
+        const needsJava=startGame || ['forge','neoforge'].includes(instance.loader)
+        const plan = await prepare(store,instance,{...task,ensureJava:needsJava ? major=>ensureInstanceJava(instance,major,startGame) : undefined},startGame ? await launchAccount() : store.data.account)
         task.progress(100,'游戏文件已就绪')
         if (!startGame) return
-        if (!instance.javaPath || !await checkJava(instance.javaPath,plan.major)) {
-          const response=await dialog.showMessageBox(win,{type:'question',message:'此实例需要 Java '+plan.major+'。自动查找本机 Java 并重新启动游戏？',buttons:['自动配置并启动','取消'],cancelId:1})
-          if(response.response!==0) throw Error('已取消启动')
-          const java=await detectJava(plan.major)
-          if(!java) throw Error('未找到 Java '+plan.major+'，请安装后重试或在设置里选择 Java。')
-          store.update(instance.id,{javaPath:java})
-        }
+        await ensureInstanceJava(instance,plan.major,true)
         await launch(instance,plan,code => {
           if(!win.isDestroyed() && !win.isVisible()) win.show()
           status(false,code === 0 ? '游戏已退出' : '游戏异常退出，请查看 launcher.log')

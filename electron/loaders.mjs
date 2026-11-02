@@ -103,5 +103,6 @@ export async function prepareLoader(store,instance,base,task,account,natives){
   instance.versionId=versionId
   instance.status='installed'
   store.save()
-  return {major,cwd:store.directory(instance.id),args}
+  // generateArguments includes the Java executable; launch() supplies it to spawn separately.
+  return {major,cwd:store.directory(instance.id),args:args.slice(1)}
 }
