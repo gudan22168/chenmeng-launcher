@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { Store } from './store.mjs'
 
 import {registerContent} from './content-ipc.mjs'
+import {registerDirectoryImport} from './directory-import.mjs'
 import {registerJournal} from './journal.mjs'
 const here = path.dirname(fileURLToPath(import.meta.url))
 app.whenReady().then(async () => {
@@ -138,6 +139,7 @@ const queue = new Downloads(() => store.data.settings, (event, data) => {
   if (event === 'jobs' && !win.isDestroyed()) win.webContents.send('jobs', data)
 })
 registerContent({store,queue,ipcMain,dialog,shell,win,isBusy:()=>gameStatus.busy})
+registerDirectoryImport({store,queue,ipcMain,dialog,shell,win,isBusy:()=>gameStatus.busy})
 registerJournal({store,ipcMain,shell,dialog,win})
 ipcMain.handle('removeInstance',async(_,id)=>{
   const instance=store.instance(id)
