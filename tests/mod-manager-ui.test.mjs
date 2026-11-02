@@ -6,11 +6,12 @@ import {Window} from 'happy-dom'
 const dom=new Window({url:'http://localhost/'})
 for(const k of ['window','document','navigator','HTMLElement','SVGElement','Element','Node','sessionStorage'])Object.defineProperty(globalThis,k,{value:k==='window'?dom:dom[k],configurable:true})
 const calls=[]
+let failPlan=true,failApply=true
 window.launcher={
  modsList:async()=>({rows:[{projectId:'local',title:'Local Mod',localVersion:'1',latest:{id:'l2',number:'2'},updateAvailable:true,path:'mods/local.jar'}],snapshot:'test',warning:''}),
  contentVersions:async()=>[{id:'v1',version_number:'1.0',version_type:'release'}],
- modsPlan:async(id,input)=>{calls.push(['plan',input]);return {token:'token',changes:[{projectId:'remote',title:'Remote Mod',versionNumber:'1.0',action:'新增'},{projectId:'dep',title:'Required API',versionNumber:'2',action:'新增',automatic:true}],remove:[],warnings:[]}},
- modsApply:async()=>{calls.push(['apply']);return 'job'},modLink:async()=>{},modReveal:async()=>{}
+ modsPlan:async(id,input)=>{calls.push(['plan',input]);if(failPlan){failPlan=false;throw Error('依赖服务暂时不可用')}return {token:'token',changes:[{projectId:'remote',title:'Remote Mod',versionNumber:'1.0',action:'新增'},{projectId:'dep',title:'Required API',versionNumber:'2',action:'新增',automatic:true}],remove:[],warnings:[]}},
+ modsApply:async()=>{calls.push(['apply']);if(failApply){failApply=false;throw Error('本地文件已变化，请重新检查')}return 'job'},modLink:async()=>{},modReveal:async()=>{}
 }
 const source=await readFile('src/ModManager.vue','utf8'),{descriptor}=parse(source)
 const compiled=compileScript(descriptor,{id:'test-mod-manager',inlineTemplate:true})
@@ -25,7 +26,7 @@ try{
  const flush=async()=>{await new Promise(r=>setTimeout(r,0));await nextTick()}
  await flush()
  assert.equal(root.querySelectorAll('.mod-pane')[0].querySelectorAll('.mod-row').length,1,'local project is excluded online')
- const button=text=>[...root.querySelectorAll('button')].find(b=>b.textContent===text)
+ const button=text=>[...document.querySelectorAll('button')].find(b=>b.textContent===text)
  button('选择版本').click();await flush()
  const sourceRow=root.querySelector('.mod-pane .mod-row')
  const dt={store:{},setData(k,v){this.store[k]=v},getData(k){return this.store[k]}}
@@ -34,12 +35,22 @@ try{
  assert.equal(calls.length,0,'dragging must not download or apply')
  assert.equal(root.querySelectorAll('.mod-pane')[0].querySelectorAll('.mod-row').length,0)
  assert(root.querySelectorAll('.mod-pane')[1].textContent.includes('待新增'))
- button('检查更改 / 补齐前置').click();await flush()
- assert.equal(calls.length,1);assert.equal(calls[0][0],'plan')
- assert(root.querySelectorAll('.mod-pane')[1].textContent.includes('Required API'))
+ button('检查并下载（1）').click();await flush()
+ assert(document.querySelector('dialog').open,'checking opens visible confirmation dialog')
+ assert(document.querySelector('dialog [role=alert]').textContent.includes('依赖服务暂时不可用'))
  assert.equal(calls.filter(c=>c[0]==='apply').length,0)
- button('应用更改并下载').click();await flush()
- assert.equal(calls.filter(c=>c[0]==='apply').length,1)
+ assert(root.querySelector('.pending'),'failed checks preserve staged changes')
+ button('重新检查').click();await flush()
+ assert(root.querySelectorAll('.mod-pane')[1].textContent.includes('Required API'))
+ assert.equal(calls.filter(c=>c[0]==='apply').length,0,'checking never downloads')
+ assert(!button('确认下载并应用更改').disabled)
+ button('确认下载并应用更改').click();await flush()
+ assert(document.querySelector('dialog [role=alert]').textContent.includes('本地文件已变化'))
+ assert(root.querySelector('.pending'),'failed apply preserves staged changes')
+ button('重新检查').click();await flush()
+ button('确认下载并应用更改').click();await flush()
+ assert.equal(calls.filter(c=>c[0]==='apply').length,2)
+ assert(!document.querySelector('dialog').open,'queued download closes confirmation')
  app.unmount()
- console.log('PASS Vue DOM: hide local projects, choose version, drag to staged list, dependency preview, explicit apply only')
+ console.log('PASS Vue DOM: hide local projects, choose version, drag to staged list, dependency preview, visible check failure, retry, preserved draft on failed apply, explicit download only')
 }finally{await rm(temporary,{recursive:true,force:true});dom.happyDOM.abort()}
