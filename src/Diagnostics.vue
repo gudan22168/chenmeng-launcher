@@ -1,5 +1,5 @@
 <script setup>
-import {ref,onMounted,watch} from 'vue'
+import {ref,onMounted,watch,nextTick,onUnmounted} from 'vue'
 const props=defineProps({instance:Object})
 const api=window.launcher,data=ref(null),busy=ref(false),error=ref(''),message=ref(''),report=ref(''),answer=ref(''),reviewed=ref(false),model=ref(''),selectedLog=ref('')
 async function act(fn){if(busy.value)return;busy.value=true;error.value='';message.value='';try{await fn()}catch(e){error.value=e.message}finally{busy.value=false}}
@@ -8,7 +8,23 @@ async function refresh(){
   report.value=data.value.report;model.value=data.value.ai.model||'';reviewed.value=false;answer.value=''
   selectedLog.value=data.value.logs[0]?.name||''
 }
-async function analyze(){const result=await api.diagnosticAnalyze(props.instance.id,report.value,model.value);if(result)answer.value=result}
+const aiPending=ref(false),aiError=ref(''),aiStatus=ref(''),elapsed=ref(0),resultPanel=ref(null)
+let waitTimer
+onUnmounted(()=>clearInterval(waitTimer))
+async function analyze(){
+  aiPending.value=true;aiError.value='';aiStatus.value='';answer.value='';elapsed.value=0
+  waitTimer=setInterval(()=>elapsed.value++,1000)
+  try{
+    const result=await api.diagnosticAnalyze(props.instance.id,report.value,model.value)
+    if(result===null){aiStatus.value='已取消，本次未发送报告';return}
+    if(typeof result!=='string'||!result.trim())throw Error('AI 没有返回分析正文，请检查模型设置后手动重试。')
+    answer.value=result;aiStatus.value='分析完成'
+  }catch(e){aiError.value=e.message || String(e)}
+  finally{
+    clearInterval(waitTimer);aiPending.value=false
+    await nextTick();resultPanel.value?.scrollIntoView({block:'nearest',behavior:'smooth'})
+  }
+}
 watch(report,()=>reviewed.value=false)
 onMounted(()=>act(refresh))
 </script>
@@ -33,6 +49,8 @@ onMounted(()=>act(refresh))
 <details><summary>查看 / 编辑将发送的报告（{{report.length}} 字符，上限 64000）</summary><textarea v-model="report" :disabled="busy" maxlength="64000" spellcheck="false" aria-label="AI 诊断报告预览"/></details>
 <label><input v-model="reviewed" type="checkbox" :disabled="busy"> 我已检查报告内容，确认本次提交</label>
 <button :disabled="busy || !data.ai.baseURL || !model || !reviewed || !report.trim()" @click="act(analyze)">提交给 AI 分析</button>
+<div ref="resultPanel" aria-live="polite"><p v-if="aiPending" role="status">正在等待确认或 AI 分析，已等待 {{elapsed}} 秒。确认发送后请求最多等待 90 秒，请留在此页。</p><p v-if="aiError" role="alert">{{aiError}}</p><p v-if="aiStatus" role="status">{{aiStatus}}</p></div>
+<small v-if="data.ai.baseURL.includes('api.deepseek.com')">官方 DeepSeek 分析请求使用非思考模式；启动器不会自动重试。</small>
 <section v-if="answer"><h3>AI 分析结果</h3><small>模型建议可能不准确，请结合日志验证。启动器不会执行其中的命令或自动修改文件。</small><pre class="ai-answer">{{answer}}</pre></section>
 </template>
 </main>

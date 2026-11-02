@@ -66,3 +66,13 @@ test('AI sends only after confirmation, hides stored key and clears it when prov
   assert.equal(changed.hasKey,false,'do not forward previous key to a different provider')
   await assert.rejects(invoke('aiSave',{baseURL:'http://remote.example/v1',model:'test-model'}),/HTTPS/)
 })
+
+
+test('AI blank/reasoning-only/truncated results are not silent successes',async()=>{
+ const {extractAIAnswer}=await import('../electron/ai-response.mjs')
+ assert.throws(()=>extractAIAnswer({choices:[{message:{content:''},finish_reason:'stop'}]}),/空的分析正文/)
+ assert.throws(()=>extractAIAnswer({choices:[{message:{content:null,reasoning_content:'private reasoning'},finish_reason:'length'}]}),/输出达到上限/)
+ assert.throws(()=>extractAIAnswer({choices:[{message:{content:' ',reasoning_content:'private reasoning'},finish_reason:'stop'}]}),/没有最终分析正文/)
+ assert.equal(extractAIAnswer({choices:[{message:{content:' Java mismatch '},finish_reason:'stop'}]}),'Java mismatch')
+ assert.match(extractAIAnswer({choices:[{message:{content:'Partial'},finish_reason:'length'}]}),/被截断/)
+})
