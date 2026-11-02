@@ -9,8 +9,8 @@ const calls=[]
 let failPlan=true,failApply=true
 window.launcher={
  modsList:async()=>({rows:[{projectId:'local',title:'Local Mod',localVersion:'1',latest:{id:'l2',number:'2'},updateAvailable:true,path:'mods/local.jar'}],snapshot:'test',warning:''}),
- contentVersions:async()=>[{id:'v1',version_number:'1.0',version_type:'release'}],
- modsPlan:async(id,input)=>{calls.push(['plan',input]);if(failPlan){failPlan=false;throw Error('依赖服务暂时不可用')}return {token:'token',changes:[{projectId:'remote',title:'Remote Mod',versionNumber:'1.0',action:'新增'},{projectId:'dep',title:'Required API',versionNumber:'2',action:'新增',automatic:true}],remove:[],warnings:[]}},
+ contentVersions:async(...args)=>{structuredClone(args);return [{id:'v1',version_number:'1.0',version_type:'release'}]},
+ modsPlan:async(id,input)=>{structuredClone(input);calls.push(['plan',input]);if(failPlan){failPlan=false;throw Error('依赖服务暂时不可用')}return {token:'token',changes:[{projectId:'remote',title:'Remote Mod',versionNumber:'1.0',action:'新增'},{projectId:'dep',title:'Required API',versionNumber:'2',action:'新增',automatic:true}],remove:[],warnings:[]}},
  modsApply:async()=>{calls.push(['apply']);if(failApply){failApply=false;throw Error('本地文件已变化，请重新检查')}return 'job'},modLink:async()=>{},modReveal:async()=>{}
 }
 const source=await readFile('src/ModManager.vue','utf8'),{descriptor}=parse(source)

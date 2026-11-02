@@ -18,7 +18,7 @@ const visibleRows=computed(()=>rows.value.filter(r=>(r.title+' '+r.path).toLower
 const canAdd=computed(()=>props.instance.loader!=='vanilla' && props.filter.version===props.instance.version && props.filter.loader===props.instance.loader)
 async function act(fn){if(loading.value)return;loading.value=true;error.value='';try{await fn()}catch(e){error.value=e.message}finally{loading.value=false}}
 async function refresh(check=false){const data=await api.modsList(props.instance.id,check);rows.value=data.rows;snapshot.value=data.snapshot;warning.value=data.warning;preview.value=null}
-async function loadVersions(hit){const id=hit.project_id||hit.projectId;const filter=JSON.stringify(props.filter);const list=await api.contentVersions(id,'mod',props.filter);if(filter!==JSON.stringify(props.filter))return;options.value[id]=list;picked.value[id]=list[0]?.id||''}
+async function loadVersions(hit){const id=hit.project_id||hit.projectId;const filter=JSON.stringify(props.filter);const list=await api.contentVersions(id,'mod',{...props.filter});if(filter!==JSON.stringify(props.filter))return;options.value[id]=list;picked.value[id]=list[0]?.id||''}
 function stage(hit,id){
   if(!canAdd.value||props.busy||loading.value)return
   const projectId=hit.project_id||hit.projectId
@@ -35,7 +35,7 @@ async function plan(){
   await nextTick()
   if(!planDialog.value.open)planDialog.value.showModal()
   try{
-    const result=await api.modsPlan(props.instance.id,{versions:pending.value.map(r=>r.versionId),remove:removed.value,snapshot:snapshot.value})
+    const result=await api.modsPlan(props.instance.id,{versions:pending.value.map(r=>r.versionId),remove:[...removed.value],snapshot:snapshot.value})
     if(!result?.token || !Array.isArray(result.changes) || !Array.isArray(result.remove))throw Error('检查结果无效，请重试')
     preview.value=result
   }catch(e){planError.value=e.message || String(e)}
