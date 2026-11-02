@@ -3,6 +3,8 @@ import {ref,computed,onMounted,watch,nextTick} from 'vue'
 const props=defineProps({instance:Object,filter:Object,hits:Array,total:Number,offset:Number,searching:Boolean,busy:Boolean})
 const emit=defineEmits(['task','page'])
 const api=window.launcher,rows=ref([]),snapshot=ref(''),loading=ref(false),error=ref(''),warning=ref(''),details=ref(null),options=ref({}),picked=ref({}),pending=ref([]),removed=ref([]),preview=ref(null),localQuery=ref(''),dragOver=ref(false),failedIcons=ref({})
+const selectedOnline=ref([]),selectedLocal=ref([]),backups=ref([]),historyOpen=ref(false)
+const hasDraft=computed(()=>pending.value.length>0||removed.value.length>0)
 const compact=ref(false)
 try{compact.value=localStorage.getItem('chenmeng.mods.compact')==='true'}catch{}
 watch(compact,value=>{try{localStorage.setItem('chenmeng.mods.compact',String(value))}catch{}})
@@ -17,7 +19,7 @@ const draftRows=computed(()=>[...pending.value,...(preview.value?.changes||[]).f
 const visibleRows=computed(()=>rows.value.filter(r=>(r.title+' '+r.path).toLowerCase().includes(localQuery.value.toLowerCase())))
 const canAdd=computed(()=>props.instance.loader!=='vanilla' && props.filter.version===props.instance.version && props.filter.loader===props.instance.loader)
 async function act(fn){if(loading.value)return;loading.value=true;error.value='';try{await fn()}catch(e){error.value=e.message}finally{loading.value=false}}
-async function refresh(check=false){const data=await api.modsList(props.instance.id,check);rows.value=data.rows;snapshot.value=data.snapshot;warning.value=data.warning;preview.value=null}
+async function refresh(check=false){const data=await api.modsList(props.instance.id,check);rows.value=data.rows;snapshot.value=data.snapshot;warning.value=data.warning;preview.value=null;selectedLocal.value=[]}
 async function loadVersions(hit){const id=hit.project_id||hit.projectId;const filter=JSON.stringify(props.filter);const list=await api.contentVersions(id,'mod',{...props.filter});if(filter!==JSON.stringify(props.filter))return;options.value[id]=list;picked.value[id]=list[0]?.id||''}
 function stage(hit,id){
   if(!canAdd.value||props.busy||loading.value)return
@@ -49,31 +51,82 @@ async function apply(){
     pending.value=[];removed.value=[];sessionStorage.removeItem(storageKey);closePlan();emit('task',id)
   }catch(e){planError.value=e.message || String(e);preview.value=null}
 }
+
+function selectVisibleOnline(){selectedOnline.value=online.value.map(r=>r.project_id)}
+function selectVisibleLocal(){selectedLocal.value=visibleRows.value.map(r=>r.path)}
+function bulkRemove(){
+  const selected=new Set(selectedLocal.value),projects=new Set(rows.value.filter(r=>selected.has(r.path)).map(r=>r.projectId).filter(Boolean))
+  removed.value=[...new Set([...removed.value,...selectedLocal.value])]
+  pending.value=pending.value.filter(r=>!projects.has(r.projectId))
+}
+function bulkUpdate(){
+  for(const row of rows.value.filter(r=>selectedLocal.value.includes(r.path)&&r.updateAvailable&&!r.disabled))stage(row,row.latest.id)
+}
+async function bulkAdd(){
+  const chosen=online.value.filter(r=>selectedOnline.value.includes(r.project_id)),filter=JSON.stringify(props.filter),additions=[]
+  if(!canAdd.value||props.busy)return
+  for(const hit of chosen){
+    if(!options.value[hit.project_id])await loadVersions(hit)
+    const id=picked.value[hit.project_id],version=options.value[hit.project_id]?.find(v=>v.id===id)
+    if(!version)throw Error(hit.title+' 没有可加入的兼容版本，尚未批量加入')
+    additions.push({projectId:hit.project_id,versionId:id,title:hit.title,versionNumber:version.version_number,icon_url:hit.icon_url})
+  }
+  if(filter!==JSON.stringify(props.filter))throw Error('筛选已改变，请重新选择')
+  const ids=new Set(additions.map(r=>r.projectId))
+  pending.value=[...pending.value.filter(r=>!ids.has(r.projectId)),...additions]
+  selectedOnline.value=[]
+}
+async function changeEnabled(paths,enabled){
+  if(hasDraft.value)throw Error('请先应用或放弃当前编辑，再启用 / 禁用模组')
+  const id=await api.modsToggle(props.instance.id,[...paths],enabled,snapshot.value)
+  if(id)emit('task',id)
+}
+async function showHistory(){backups.value=await api.modBackups(props.instance.id);historyOpen.value=true}
+async function restore(backup){
+  if(hasDraft.value)throw Error('请先应用或放弃当前编辑，再恢复备份')
+  const id=await api.restoreModBackup(props.instance.id,backup.id)
+  if(id)emit('task',id)
+}
+watch(()=>props.hits,()=>selectedOnline.value=[])
+
 function icon(r){return r.icon_url&&!failedIcons.value[r.icon_url]}
 watch(()=>JSON.stringify(props.filter),()=>{options.value={};picked.value={}})
 onMounted(()=>act(()=>refresh()))
 </script>
 <template>
 <section class="mod-manager" :class="{compact}">
-<div class="manager-toolbar"><strong>模组工作台</strong><button :aria-pressed="compact" @click="compact=!compact">{{compact?'完整显示':'精简显示'}}</button><button :disabled="loading||busy" @click="act(()=>refresh())">扫描本地</button><button :disabled="loading||busy" @click="act(()=>refresh(true))">检查更新 / 前置</button><button :disabled="loading||busy||!snapshot" @click="act(()=>plan())">检查更改 / 补齐前置</button></div>
+<div class="manager-toolbar"><strong>模组工作台</strong><button :disabled="loading||busy" @click="act(showHistory)">备份与恢复</button><button :aria-pressed="compact" @click="compact=!compact">{{compact?'完整显示':'精简显示'}}</button><button :disabled="loading||busy" @click="act(()=>refresh())">扫描本地</button><button :disabled="loading||busy" @click="act(()=>refresh(true))">检查更新 / 前置</button><button :disabled="loading||busy||!snapshot" @click="act(()=>plan())">检查更改 / 补齐前置</button></div>
 <p class="hint">左侧选择版本后拖到右侧，或点击“加入”。编辑期间不下载；点击右侧底部“检查并下载”，确认清单后才执行。离开页面会保留本次会话的草稿。</p>
 <p v-if="!canAdd" class="hint">当前筛选仅供浏览。添加模组需选择与实例相同的 {{instance.version}} / {{instance.loader}}；原版实例请先安装加载器。</p>
 <p v-if="error" role="alert">{{error}}</p><p v-if="warning" role="status">{{warning}}</p><p v-if="loading">正在读取或检查…</p>
 <div class="mod-columns">
-<section class="mod-pane"><header><strong>网上模组</strong><small>已隐藏右侧已识别的项目</small></header><div class="mod-scroll">
+<section class="mod-pane"><header><strong>网上模组</strong><small>已隐藏右侧已识别的项目</small></header>
+<div class="batch-toolbar"><button :disabled="loading||busy" @click="selectVisibleOnline">选择本页</button><button :disabled="loading||busy" @click="selectedOnline=[]">清空选择</button><button :disabled="loading||busy||!canAdd||!selectedOnline.length" @click="act(bulkAdd)">批量加入（{{selectedOnline.length}}）</button><small>使用各项目已选版本；未选时使用版本列表首项。</small></div><div class="mod-scroll">
 <article v-for="hit in online" :key="hit.project_id" class="mod-row" :draggable="!!picked[hit.project_id]&&canAdd&&!busy&&!loading" @dragstart="drag($event,hit)">
-<div class="mod-main"><span class="mod-icon"><img v-if="icon(hit)" :src="hit.icon_url" alt="" loading="lazy" referrerpolicy="no-referrer" @error="failedIcons[hit.icon_url]=true"><span v-else>◇</span></span><button class="mod-title" @click="details=hit">{{hit.title}}</button></div><small v-if="!compact" class="description">{{hit.description}}</small>
+<div class="mod-main"><input type="checkbox" :value="hit.project_id" v-model="selectedOnline" :disabled="loading||busy" :aria-label="'选择网上模组 '+hit.title"><span class="mod-icon"><img v-if="icon(hit)" :src="hit.icon_url" alt="" loading="lazy" referrerpolicy="no-referrer" @error="failedIcons[hit.icon_url]=true"><span v-else>◇</span></span><button class="mod-title" @click="details=hit">{{hit.title}}</button></div><small v-if="!compact" class="description">{{hit.description}}</small>
 <div class="row-actions"><button :disabled="loading" @click="act(()=>loadVersions(hit))">选择版本</button><select v-if="options[hit.project_id]" v-model="picked[hit.project_id]" :aria-label="hit.title+' 版本'"><option v-for="v in options[hit.project_id]" :key="v.id" :value="v.id">{{v.version_number}} · {{v.version_type}}</option></select><button :disabled="!canAdd||!picked[hit.project_id]||busy||loading" @click="stage(hit,picked[hit.project_id])">加入 →</button></div>
 </article><p v-if="!online.length">{{searching?'正在搜索…':'本页没有未安装项目，可换页或调整筛选。'}}</p></div>
 <footer><button :disabled="searching||!offset" @click="emit('page',-1)">上一页</button><small>{{total?offset+1:0}}–{{offset+(hits?.length||0)}} / {{total}}</small><button :disabled="searching||offset+(hits?.length||0)>=total" @click="emit('page',1)">下一页</button></footer></section>
-<section class="mod-pane" :class="{dragover:dragOver}" @dragover.prevent="dragOver=true" @dragleave.self="dragOver=false" @drop.prevent="drop"><header><strong>本地模组 · {{rows.length}}</strong><input v-model="localQuery" placeholder="筛选本地" aria-label="筛选本地模组"></header><div class="mod-scroll">
+<section class="mod-pane" :class="{dragover:dragOver}" @dragover.prevent="dragOver=true" @dragleave.self="dragOver=false" @drop.prevent="drop"><header><strong>本地模组 · {{rows.length}}</strong><input v-model="localQuery" placeholder="筛选本地" aria-label="筛选本地模组"></header>
+<div class="batch-toolbar"><button :disabled="loading||busy" @click="selectVisibleLocal">选择筛选结果</button><button :disabled="loading||busy" @click="selectedLocal=[]">清空选择</button><small>已选 {{selectedLocal.length}} 项</small>
+<button :disabled="loading||busy||hasDraft||!selectedLocal.length" @click="act(()=>changeEnabled(selectedLocal,true))">批量启用</button>
+<button :disabled="loading||busy||hasDraft||!selectedLocal.length" @click="act(()=>changeEnabled(selectedLocal,false))">批量禁用</button>
+<button :disabled="loading||busy||!canAdd||!rows.some(r=>selectedLocal.includes(r.path)&&r.updateAvailable&&!r.disabled)" @click="bulkUpdate">加入所选更新</button>
+<button :disabled="loading||busy||!selectedLocal.length" @click="bulkRemove">加入所选移除</button>
+<small v-if="hasDraft">先应用或放弃编辑，才能启用、禁用或恢复。</small></div><div class="mod-scroll">
 <article v-for="item in draftRows" :key="item.projectId" class="mod-row pending"><strong>{{item.title}}</strong><small>待新增 · {{item.versionNumber}} {{item.automatic?'（必需前置）':''}}</small><button v-if="!item.automatic" :disabled="loading||busy" @click="pending=pending.filter(p=>p.projectId!==item.projectId)">撤销</button></article>
-<article v-for="row in visibleRows" :key="row.path" class="mod-row" :class="{removing:removed.includes(row.path)}"><div class="mod-main"><span class="mod-icon"><img v-if="icon(row)" :src="row.icon_url" alt="" loading="lazy" @error="failedIcons[row.icon_url]=true"><span v-else>◇</span></span><button class="mod-title" @click="details=row">{{row.title}}</button></div>
+<article v-for="row in visibleRows" :key="row.path" class="mod-row" :class="{removing:removed.includes(row.path)}"><div class="mod-main"><input type="checkbox" :value="row.path" v-model="selectedLocal" :disabled="loading||busy" :aria-label="'选择本地模组 '+row.title"><span class="mod-icon"><img v-if="icon(row)" :src="row.icon_url" alt="" loading="lazy" @error="failedIcons[row.icon_url]=true"><span v-else>◇</span></span><button class="mod-title" @click="details=row">{{row.title}}</button></div>
 <small>本地 {{row.localVersion||row.versionNumber||'未知版本'}}{{row.disabled?' · 已禁用':''}}</small><small v-if="row.latest">最新兼容正式版 {{row.latest.number}}{{row.updateAvailable?' · 可更新':''}}</small><small v-if="row.checkMessage">{{row.checkMessage}}</small><small v-if="row.missing?.length">缺少 {{row.missing.length}} 项前置，请点击“检查更改 / 补齐前置”</small><small v-if="!row.projectId">未识别 · 可查看本地信息与搜索相关网站</small>
 <small v-if="pending.some(p=>p.projectId===row.projectId)" class="pending">待更新 → {{pending.find(p=>p.projectId===row.projectId).versionNumber}} <button @click="pending=pending.filter(p=>p.projectId!==row.projectId)" :disabled="loading||busy">撤销</button></small><small v-if="removed.includes(row.path)">待移除</small>
-<div class="row-actions"><button @click="act(()=>api.modReveal(instance.id,row.path))">本地位置</button><button v-if="row.projectId&&!row.disabled" :disabled="loading||busy||!canAdd" @click="act(()=>loadVersions(row))">指定版本</button><select v-if="options[row.projectId]" v-model="picked[row.projectId]" :aria-label="row.title+' 本地目标版本'"><option v-for="v in options[row.projectId]" :key="v.id" :value="v.id">{{v.version_number}} · {{v.version_type}}</option></select><button v-if="options[row.projectId]" :disabled="loading||busy||!canAdd||!picked[row.projectId]" @click="stage(row,picked[row.projectId])">加入更改</button><button v-if="row.updateAvailable&&!row.disabled" :disabled="loading||busy||!canAdd" @click="stage(row,row.latest.id)">加入更新</button><button :disabled="loading||busy" @click="remove(row)">{{removed.includes(row.path)?'撤销移除':'移除'}}</button></div></article>
+<div class="row-actions"><button :disabled="loading||busy||hasDraft" @click="act(()=>changeEnabled([row.path],row.disabled))">{{row.disabled?'启用':'禁用'}}</button><button @click="act(()=>api.modReveal(instance.id,row.path))">本地位置</button><button v-if="row.projectId&&!row.disabled" :disabled="loading||busy||!canAdd" @click="act(()=>loadVersions(row))">指定版本</button><select v-if="options[row.projectId]" v-model="picked[row.projectId]" :aria-label="row.title+' 本地目标版本'"><option v-for="v in options[row.projectId]" :key="v.id" :value="v.id">{{v.version_number}} · {{v.version_type}}</option></select><button v-if="options[row.projectId]" :disabled="loading||busy||!canAdd||!picked[row.projectId]" @click="stage(row,picked[row.projectId])">加入更改</button><button v-if="row.updateAvailable&&!row.disabled" :disabled="loading||busy||!canAdd" @click="stage(row,row.latest.id)">加入更新</button><button :disabled="loading||busy" @click="remove(row)">{{removed.includes(row.path)?'撤销移除':'移除'}}</button></div></article>
 <p v-if="!rows.length&&!pending.length">将左侧模组拖到这里，编辑完成后统一应用。</p></div><footer><small>{{pending.length}} 项待添加 / 更新 · {{removed.length}} 项待移除</small><div class="row-actions"><button class="download-entry" :disabled="loading||busy||!snapshot" @click="act(()=>plan())">检查并下载（{{pending.length+removed.length}}）</button><button :disabled="loading||busy" @click="pending=[];removed=[]">放弃编辑</button></div></footer></section>
 </div>
+<section v-if="historyOpen" class="plan-panel">
+<div class="row-actions"><h3>模组备份与恢复</h3><button @click="historyOpen=false">收起</button><button :disabled="loading||busy" @click="act(showHistory)">刷新备份</button><button @click="act(()=>api.modBackupFolder(instance.id))">打开备份目录</button></div>
+<p>更新、安装、移除和启用状态变更前会保存完整模组快照。恢复只影响模组，不包含存档和配置；备份不会自动清理，会占用磁盘空间。</p>
+<p v-if="!backups.length">暂无可用快照。旧版备份没有清单，只能从备份目录手动提取。</p>
+<article v-for="backup in backups" :key="backup.id"><strong>{{new Date(backup.time).toLocaleString()}} · {{backup.reason}}</strong><small>{{backup.count}} 个模组 · {{(backup.bytes/1048576).toFixed(1)}} MiB</small>
+<button :disabled="loading||busy||hasDraft||!backup.canRestore" @click="act(()=>restore(backup))">恢复此操作前状态</button><small v-if="!backup.canRestore">当前文件已不同于这次操作完成时的状态，禁止直接覆盖；可以打开目录手动提取。</small></article></section>
 <Teleport to="body"><dialog ref="planDialog" class="mod-confirm" aria-labelledby="mod-confirm-title" @cancel.prevent="!loading && closePlan()">
 <h3 id="mod-confirm-title">确认模组更改</h3>
 <p v-if="loading" role="status">{{preview?'正在创建下载任务…':'正在检查版本和必需前置，请稍候…'}}</p>
@@ -94,4 +147,5 @@ onMounted(()=>act(()=>refresh()))
 .download-entry{background:#eed2be;font-weight:800}.mod-pane footer{flex-wrap:wrap}
 .mod-confirm{color:#130918;background:#f2f0e6;border:1px solid #a89986;border-radius:10px;width:min(620px,90vw);max-height:80vh;overflow:auto;padding:24px}
 .mod-confirm::backdrop{background:#241c1966}.mod-confirm button{margin:8px 8px 0 0;font-size:14px}.mod-confirm .plan-panel{border:0;padding:0}.plan-error{color:#a12828;white-space:pre-wrap;overflow-wrap:anywhere}
+.batch-toolbar{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:8px;border-bottom:1px dotted #b5a58c}.batch-toolbar small{flex-basis:100%}.mod-main input[type=checkbox]{width:16px;height:16px;flex-shrink:0}.plan-panel article{padding:10px 0;border-bottom:1px dotted #b5a58c}
 </style>

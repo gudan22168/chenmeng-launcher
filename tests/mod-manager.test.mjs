@@ -7,6 +7,7 @@ import AdmZip from 'adm-zip'
 import {Store} from '../electron/store.mjs'
 import {scanMods,identifyMods,checkMods,fingerprint,planMods,applyModPlan} from '../electron/mod-manager.mjs'
 import {searchContent} from '../electron/content.mjs'
+import {listModBackups} from '../electron/mod-history.mjs'
 const root=await mkdtemp(path.join(os.tmpdir(),'chenmeng-mod-manager-')),store=new Store(root),instance=store.instance(store.data.selectedId)
 instance.loader='fabric'
 const dir=store.directory(instance.id),data={old:Buffer.from('old'),next:Buffer.from('new'),dep:Buffer.from('dep')}
@@ -53,6 +54,8 @@ try{
  assert.equal((await readFile(path.join(dir,'mods/A.jar'))).toString(),'new')
  assert.equal((await readFile(path.join(dir,'mods/B.jar'))).toString(),'dep')
  assert.equal(instance.installed.length,2)
+ const history=await listModBackups(store,instance)
+ assert(history.some(b=>b.canRestore&&b.reason==='更新 / 安装 / 移除前'),'updates create a restorable snapshot')
  await assert.rejects(applyModPlan(store,instance,plan,task),/改变/)
  rows=await identifyMods(await scanMods(store,instance))
  const removePlan=await planMods(store,instance,{snapshot:fingerprint(rows),versions:[],remove:['mods/A.jar','mods/B.jar']})

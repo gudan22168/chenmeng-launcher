@@ -8,6 +8,10 @@ for(const k of ['window','document','navigator','HTMLElement','SVGElement','Elem
 const calls=[]
 let failPlan=true,failApply=true
 window.launcher={
+ modsToggle:async(...args)=>{structuredClone(args);calls.push(['toggle',...args]);return 'toggle-job'},
+ modBackups:async()=>[{id:'backup',time:'2026-11-02T00:00:00Z',reason:'更新前',count:1,bytes:10,canRestore:true}],
+ restoreModBackup:async(...args)=>{structuredClone(args);calls.push(['restore',...args]);return 'restore-job'},
+ modBackupFolder:async()=>{},
  modsList:async()=>({rows:[{projectId:'local',title:'Local Mod',localVersion:'1',latest:{id:'l2',number:'2'},updateAvailable:true,path:'mods/local.jar'}],snapshot:'test',warning:''}),
  contentVersions:async(...args)=>{structuredClone(args);return [{id:'v1',version_number:'1.0',version_type:'release'}]},
  modsPlan:async(id,input)=>{structuredClone(input);calls.push(['plan',input]);if(failPlan){failPlan=false;throw Error('[DEPENDENCY_UNRESOLVED] 缺少前置')}return {token:'token',changes:[{projectId:'remote',title:'Remote Mod',versionNumber:'1.0',action:'新增'},{projectId:'dep',title:'Required API',versionNumber:'2',action:'新增',automatic:true}],remove:[],warnings:[]}},
@@ -52,6 +56,14 @@ try{
  button('确认下载并应用更改').click();await flush()
  assert.equal(calls.filter(c=>c[0]==='apply').length,2)
  assert(!document.querySelector('dialog').open,'queued download closes confirmation')
+ const localCheckbox=root.querySelector('input[aria-label="选择本地模组 Local Mod"]')
+ localCheckbox.checked=true;localCheckbox.dispatchEvent(new dom.Event('change',{bubbles:true}));await flush()
+ button('批量禁用').click();await flush()
+ const toggled=calls.find(c=>c[0]==='toggle')
+ assert.deepEqual(toggled.slice(1),['test',['mods/local.jar'],false,'test'])
+ button('备份与恢复').click();await flush()
+ button('恢复此操作前状态').click();await flush()
+ assert.deepEqual(calls.find(c=>c[0]==='restore').slice(1),['test','backup'])
  app.unmount()
  console.log('PASS Vue DOM: hide local projects, choose version, drag to staged list, dependency preview, visible check failure, retry, preserved draft on failed apply, explicit download only')
 }finally{await rm(temporary,{recursive:true,force:true});dom.happyDOM.abort()}

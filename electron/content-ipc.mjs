@@ -1,3 +1,4 @@
+import {toggleMods,listModBackups,restoreModBackup} from './mod-history.mjs'
 import {scanMods,identifyMods,checkMods,fingerprint,planMods,applyModPlan} from './mod-manager.mjs'
 import path from 'node:path'
 import {promises as fs} from 'node:fs'
@@ -41,6 +42,35 @@ export function registerContent({store,queue,ipcMain,dialog,shell,win,isBusy}){
     plans.delete(token)
     return queue.add('应用模组更改 · '+instance.name,task=>applyModPlan(store,instance,plan,task),instance.id)
   })
+  ipcMain.handle('modsToggle',async(_,id,paths,enabled,snapshot)=>{
+    idle()
+    const instance=store.instance(id)
+    if(!Array.isArray(paths)||!paths.length||paths.length>1000||typeof enabled!=='boolean'||typeof snapshot!=='string')throw Error('批量操作参数无效')
+    const answer=await dialog.showMessageBox(win,{type:'question',message:(enabled?'启用':'禁用')+'所选 '+paths.length+' 个模组？',
+      detail:'操作前会备份当前全部模组。禁用只把 .jar 改名为 .jar.disabled，不删除文件。依赖这些模组的其他模组可能需要一起调整。',
+      buttons:[enabled?'备份并启用':'备份并禁用','取消'],defaultId:1,cancelId:1})
+    if(answer.response!==0)return
+    idle()
+    return queue.add((enabled?'启用':'禁用')+'模组 · '+instance.name,task=>toggleMods(store,instance,paths,enabled,snapshot,task),instance.id)
+  })
+  ipcMain.handle('modBackups',(_,id)=>listModBackups(store,store.instance(id)))
+  ipcMain.handle('modBackupFolder',async(_,id)=>{
+    const directory=await safeTarget(store.directory(id),'mod-backups')
+    await fs.mkdir(directory,{recursive:true})
+    const error=await shell.openPath(directory);if(error)throw Error(error)
+  })
+  ipcMain.handle('restoreModBackup',async(_,id,backupId)=>{
+    idle()
+    const instance=store.instance(id),backup=(await listModBackups(store,instance)).find(b=>b.id===backupId)
+    if(!backup||!backup.canRestore)throw Error('该备份无法直接恢复：当前模组与该次操作完成时不同。请打开备份目录核对。')
+    const answer=await dialog.showMessageBox(win,{type:'question',message:'恢复到 '+new Date(backup.time).toLocaleString()+' 操作前的模组状态？',
+      detail:'还原 '+backup.count+' 个模组及启用状态。不会修改存档、模组配置、资源包和光影。恢复前的当前模组也会另存备份。',
+      buttons:['备份当前状态并恢复','取消'],defaultId:1,cancelId:1})
+    if(answer.response!==0)return
+    idle()
+    return queue.add('恢复模组备份 · '+instance.name,task=>restoreModBackup(store,instance,backupId,task),instance.id)
+  })
+
   ipcMain.handle('modReveal',async(_,id,relative)=>{
     if(typeof relative!=='string'||!/^mods\/[^/]+\.jar(?:\.disabled)?$/i.test(relative))throw Error('模组路径无效')
     const file=await safeTarget(store.directory(id),relative)

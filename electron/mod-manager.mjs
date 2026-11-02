@@ -1,4 +1,5 @@
 import path from 'node:path'
+import {createModBackup,finishModBackup} from './mod-history.mjs'
 import {promises as fs} from 'node:fs'
 import {randomUUID} from 'node:crypto'
 import AdmZip from 'adm-zip'
@@ -23,7 +24,7 @@ export async function scanMods(store,instance){
     if(!entry.isFile() || !/\.jar(?:\.disabled)?$/i.test(entry.name))continue
     const relative='mods/'+entry.name,file=await safeTarget(root,relative),hash=await hashFile(file,'sha512')
     const record=records.find(r=>r.path===relative && r.hashes?.sha512===hash)
-    rows.push({...metadata(file),...record,path:relative,hash,size:(await fs.stat(file)).size,disabled:entry.name.endsWith('.disabled')})
+    rows.push({...metadata(file),...record,path:relative,hash,size:(await fs.stat(file)).size,disabled:/\.disabled$/i.test(entry.name)})
     rows.at(-1).title ||= entry.name
   }
   return rows.sort((a,b)=>a.path.localeCompare(b.path))
@@ -105,7 +106,8 @@ export async function planMods(store,instance,input){
 export async function applyModPlan(store,instance,plan,task){
   const root=store.directory(instance.id)
   if(instance.version!==plan.gameVersion||instance.loader!==plan.loader||root!==plan.root||fingerprint(await scanMods(store,instance))!==plan.snapshot)throw Error('本地文件或版本隔离设置已改变，请重新生成清单')
-  const stage=path.join(store.root,'staging',randomUUID()),backup=await safeTarget(root,'mod-backups/'+randomUUID())
+  const stage=path.join(store.root,'staging',randomUUID())
+  let history,backup
   const oldRecords=installed(store,instance).slice(),moved=[],added=[]
   await fs.mkdir(stage,{recursive:true})
   try{
@@ -116,6 +118,10 @@ export async function applyModPlan(store,instance,plan,task){
     }
     task.signal?.throwIfAborted()
     if(fingerprint(await scanMods(store,instance))!==plan.snapshot)throw Error('下载期间本地模组发生变化，请重新编辑')
+    history=await createModBackup(store,instance,'更新 / 安装 / 移除前',plan.snapshot,task)
+    backup=path.join(history.directory,'rollback')
+    task.signal?.throwIfAborted()
+    if(fingerprint(await scanMods(store,instance))!==plan.snapshot)throw Error('备份期间本地模组发生变化')
     // No cancellation points inside the short commit phase; failure restores all old files.
     for(const relative of plan.remove){
       const source=await safeTarget(root,relative),dest=inside(backup,relative)
@@ -127,11 +133,14 @@ export async function applyModPlan(store,instance,plan,task){
     }
     setInstalled(store,instance,[...oldRecords.filter(r=>!plan.remove.includes(r.path)&&!plan.changes.some(n=>n.projectId===r.projectId)),...plan.changes.map(({action,automatic,from,...r})=>r)])
     store.save()
+    await finishModBackup(store,instance,history)
   }catch(e){
     for(const f of added)await fs.unlink(f)
     for(const [source,dest] of moved.reverse())await fs.rename(dest,source)
     setInstalled(store,instance,oldRecords)
+    try{store.save()}catch{}
     throw e
   }finally{await fs.rm(stage,{recursive:true,force:true})}
-  task.progress(100,'模组更改已应用；原文件保存在实例的 mod-backups 中')
+  if(backup && path.dirname(path.resolve(backup))===path.resolve(history.directory))await fs.rm(backup,{recursive:true,force:true}).catch(()=>{})
+  task.progress(100,'模组更改已应用；操作前的完整模组快照可在备份与恢复中还原')
 }
