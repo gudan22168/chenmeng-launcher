@@ -23,6 +23,9 @@ export class Store {
     }
     this.data = saved || { settings: {}, instances: [], selectedId: '', account: { type: 'offline', name: 'Explorer', uuid: offlineUUID('Explorer') } }
     this.data.settings = { ...defaultSettings, ...this.data.settings }
+    if (this.data.account?.type === 'microsoft' && this.data.credential) {
+      this.data.savedMicrosoft = this.data.account
+    }
     if (!saved) this.create({ name: '原野生存', version: '1.21.1', loader: 'vanilla' })
     this.save()
   }
@@ -90,6 +93,12 @@ export class Store {
     this.data.account = { name, type: 'offline', uuid: offlineUUID(name) }
     this.save()
     return this.data.account
+  }
+  clearMicrosoft() {
+    delete this.data.credential
+    delete this.data.savedMicrosoft
+    if (this.data.account.type === 'microsoft') this.setAccount('Explorer')
+    else this.save()
   }
   snapshot() {
     const {credential,...visible}=this.data

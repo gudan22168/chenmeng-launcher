@@ -58,10 +58,10 @@ function finishReturn(){
   if(returning && page.value==='下载' && jobs.value.some(j=>j.id===returning.id && j.status==='completed' && !j.name.startsWith('下载整合包'))) navigate(returning.page)
 }
 const msBusy=ref(false)
-async function microsoft(){
+async function microsoft(action = 'microsoft'){
   msBusy.value=true
   loginError.value=''
-  try{state.value=await api.microsoft();accountOpen.value=false}
+  try{state.value=await api[action]();accountOpen.value=false}
   catch(e){loginError.value=e.message}
   finally{msBusy.value=false}
 }
@@ -121,7 +121,7 @@ const folders={'实例目录':'','存档':'saves','游戏截图':'screenshots','
 <div class="intro"><small>01　我的世界 · 我的旅程</small><em>每个世界，一页梦境。</em></div>
 <button class="account" @click="toggleAccount" :aria-expanded="accountOpen" aria-controls="account-panel"><img :src="avatar" alt=""><span><b>{{state?.account.name || 'Explorer'}}</b><br>● {{state?.account.type==='microsoft'?'正版':'离线'}}　⌄</span></button>
 <form v-if="accountOpen" id="account-panel" class="account-panel" @submit.prevent="login" @keydown.esc="accountOpen=false">
-<div class="account-heading"><strong>账户</strong><button type="button" aria-label="关闭账户面板" @click="accountOpen=false"><X/></button></div><label>玩家名<input required pattern="[A-Za-z0-9_]{3,16}" maxlength="16" v-model="player" autocomplete="off" title="3–16 位字母、数字或下划线"></label><small>3–16 位英文字母、数字或下划线</small><p v-if="loginError" role="alert">{{loginError}}</p><button>使用此用户名</button><button type="button" :disabled="msBusy" @click="microsoft">{{msBusy?'等待 Microsoft 授权…':'Microsoft 正版登录'}}</button></form>
+<div class="account-heading"><strong>账户</strong><button type="button" aria-label="关闭账户面板" @click="accountOpen=false"><X/></button></div><label>玩家名<input required pattern="[A-Za-z0-9_]{3,16}" maxlength="16" v-model="player" autocomplete="off" title="3–16 位字母、数字或下划线"></label><small>3–16 位英文字母、数字或下划线</small><p v-if="loginError" role="alert">{{loginError}}</p><button>使用此用户名</button><button type="button" :disabled="msBusy" @click="microsoft()">{{msBusy?'正在处理…':state?.savedMicrosoft?'使用正版账户 · '+state.savedMicrosoft.name:'Microsoft 正版登录'}}</button><button v-if="state?.savedMicrosoft" type="button" :disabled="msBusy" @click="microsoft('clearMicrosoft')">清除正版账户</button></form>
 <section class="journey"><div class="world"><small>继续你的旅程</small><h1>{{current?.name || '尚无实例'}}</h1><div class="meta">MINECRAFT {{current?.version || '1.21.1'}}　/　{{(current?.loader || 'vanilla').toUpperCase()}}</div><aside><Bookmark/> {{current?.lastPlayed ? '上次游玩 · '+ new Date(current.lastPlayed).toLocaleString('zh-CN') : '新的旅程'}}</aside></div>
 <div class="switch"><button @click="navigate('实例')"><ArrowRightLeft/> 切换游戏</button><button title="实例目录" aria-label="打开实例目录" @click="run(()=>api.folder(''))"><Ellipsis/></button></div>
 <div class="launch"><button class="primary" :disabled="gameStatus.busy || !current" @click="startPlay()"><Play/>{{gameStatus.busy?'游戏进行中':'启动游戏'}}</button><small>{{gameStatus.busy?'IN PROGRESS':'JAVA EDITION'}}</small></div></section>

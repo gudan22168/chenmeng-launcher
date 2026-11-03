@@ -2,109 +2,51 @@
 
 每个世界，一页梦境。
 
-ChenMeng is an independent Minecraft Java Edition desktop launcher built with Vue, Electron and Node.js. Its paper-and-watercolor interface focuses on selecting an instance and continuing a game.
+尘梦是一款面向 Windows 的 Minecraft Java 版启动器。打开它，上次玩的世界和「启动游戏」就在手边。把窗口缩小，主页也会跟着收起来。要换整合包、整理模组，或翻一翻昨天的截图，再从侧栏进去。
 
-This project is under active development. Microsoft sign-in and Xbox authorization have been tested with a real account. Minecraft game-token issuance currently returns HTTP 403; application access review and end-to-end online gameplay verification remain pending.
+[下载 Windows 便携版](https://github.com/gudan22168/chenmeng-launcher/releases/latest) · [反馈问题](https://github.com/gudan22168/chenmeng-launcher/issues)
 
-## 当前功能
+## 第一次出发
 
-- 原版游戏版本选择、文件校验、下载进度与游戏启动。
-- 新建实例时选择 Fabric、Forge 或 NeoForge 及其版本，随游戏一起安装。
-- Modrinth 内容搜索按当前游戏版本筛选，模组与整合包同时匹配加载器；安装必需依赖并校验文件。
-- .mrpack 整合包导入与可选内容导出，支持模组、资源包、光影、配置、存档和截图。
-- 窗口缩小时逐级精简首页，最小化为带账户和启动按钮的迷你布局。
-- 实例创建、切换、移除，以及存档、模组、截图等目录快捷访问。
-- Java 检测、内存分配、版本隔离、启动后隐藏窗口与游戏标题设置。
-- 游戏截图或自选图片封面。
-- 世界手记支持标题、日期、备注、滤镜预览、原图定位与带纸边的 PNG 导出。
-- 本地离线玩家配置，以及 Microsoft 设备代码登录入口。
+1. 打开启动器，点右上角头像。选择 Microsoft 正版登录，在微软页面粘贴自动复制的设备码。想用离线角色，也可以直接输入玩家名。
+2. 在「实例」里选游戏版本和加载器。已经有游戏目录的玩家可以先扫描目录，核对位置后再导入。[已有目录导入说明](docs/directory-import.md)
+3. 下载完成后回到主页，点「启动游戏」。下载较慢时，可以在设置里选择官方源或 BMCLAPI。
 
-## Authentication and API usage
+正版登录已实现。当前源码会记住已授权的正版账户。临时换成离线角色，即使关闭启动器，下次也可以从头像菜单切回。选择「清除正版账户」并确认后，才会移除这台电脑保存的授权。微软要求重新验证身份时，仍需再授权一次。
 
-The desktop app initiates the Microsoft OAuth device-code flow for personal Microsoft accounts, requesting XboxLive.signin and offline_access. Users enter the device code and authorize the application on Microsoft's website.
+## 给世界添点东西
 
-The main process exchanges the Microsoft access token for Xbox Live and XSTS tokens, then requests a Minecraft access token through authentication/login_with_xbox and reads minecraft/profile to obtain the Java Edition player name and UUID. The Minecraft access token is used when starting the game. The intended API use is signing players into their own accounts and launching their Java Edition game.
+内容工坊可以按版本和加载器找 Modrinth 模组、资源包、光影和整合包。模组工作台把网上可用的模组和本地文件并排放在一起，先检查更新和前置，再决定应用哪些更改。要和朋友分享整合包，也可以自己挑选导出内容。[模组变更与恢复](docs/mod-history.md)
 
-The registered application client ID is 8afeda54-6272-4879-a5e6-5c8b24f2e26e. Minecraft service access is currently being investigated as part of the application review process.
+碰到没翻译的模组，可以先读出语言条目，对照原文改译名，再导出资源包。使用 AI 翻译需要在设置里填入自己的服务信息。[模组语言包说明](docs/AI-LANGUAGE-PACKS.md)
 
-## Local data and privacy
+## 给截图留一句话
 
-The launcher stores instance settings, the selected player's name and UUID, and journal annotations locally. After successful online sign-in, the Microsoft refresh token is encrypted using Electron safeStorage before local persistence. Access tokens are held in the main process and passed to the game when launching. Switching to an offline player removes the saved refresh-token entry.
+在「世界手记」里翻到一张截图，给它起个名字，记下那天发生的事。可以保留原色，也可以选个滤镜，连同日期一起导出为 PNG。想找原图，点一下就能在资源管理器里定位。
 
-The device code is copied to the system clipboard once when sign-in starts. Screenshots and exported journal images are stored locally. Authentication communicates directly with Microsoft, Xbox and Minecraft services. Game downloads use Mojang/Minecraft distribution endpoints.
+## 接下来想做什么
 
-## Development
+正版登录、离线角色、下载源切换和世界手记都已可用。接下来想优先解决三件玩家实际会碰到的事：
 
-Install Node.js 22 and npm, then run the following commands from the repository directory.
+- 多试几组 Forge 和 NeoForge 的游戏版本、加载器和 Java 组合，把安装失败的具体环节提示出来。
+- 给存档加上备份与恢复，让玩家在换整合包或升级游戏前留一份可以回去的世界。
+- 继续补充启动诊断规则，让更多常见崩溃能直接给出下一步处理办法。[现有诊断功能](docs/diagnostics.md)
 
-```sh
-npm ci
-npm run build
-npm start
-```
+## 账号与本地数据
 
-On Windows, Start-ChenMeng.cmd opens the built application using a project-local data directory. A compatible Java runtime is required for gameplay. npm run dev starts the development workflow.
+Microsoft 登录在微软官网完成。启动器通过 Xbox 和 Minecraft 服务获取 Java 版角色，刷新凭据由 Electron 的系统安全存储加密后保存在本机。便携版默认使用程序旁的 `.minecraft` 保存游戏数据。分享整合包前，请核对勾选的存档、截图和配置。
 
-The Windows runtime has received the most testing. Desktop interaction, account renewal and online gameplay still need broader verification. A packaged executable is not included in this initial source publication.
+## 从源码运行
 
-## Planned work
-
-- Complete Minecraft service approval and verify online sign-in, renewal and gameplay.
-- Broaden Forge/NeoForge installation and desktop interaction testing.
-- Add world backups and improve launch diagnostics.
-
-Project feedback can be submitted through this repository's Issues.
-
-ChenMeng is an independent community project and is not affiliated with or endorsed by Mojang or Microsoft. Minecraft belongs to its respective owners.
-
-Source license is MIT, as provided in LICENSE.
-
-
-## Content installation and modpacks
-
-Content Workshop searches the official Modrinth API. Mods and modpacks are filtered by both the selected Minecraft version and loader. Resource packs and shaders are filtered by game version. Shaders also require a compatible shader loader in the instance.
-
-Required Modrinth dependencies are resolved recursively. Conflicting versions and declared incompatibilities stop installation. New files are staged before being copied into the instance; a failed operation rolls back newly added files. Managed content can be moved to the recycle bin after a confirmation.
-
-Modrinth .mrpack imports create a separate isolated instance. The importer applies client overrides, skips server-only files, and asks whether to include optional client files. Unsupported pack loaders are rejected explicitly. Failed download/install tasks can be retried from Downloads.
-
-Exports allow selecting mods, resource packs, shaders, configuration, options.txt, saves, and screenshots. Unchanged managed files are represented by download URLs and hashes; other selected local files are included as overrides. Export size is limited to 1 GiB and archive extraction to 2 GiB. Review selected local files before distributing an exported pack.
-
-## Download sources and validation
-
-Vanilla files use Mojang/Minecraft distribution endpoints. Modrinth uses its official API and CDN. Fabric uses Fabric Meta and Maven; Forge and NeoForge use their official Maven repositories. There is currently no mirror selector. Transfer speed depends on the user's network and the upstream service.
-
-Fabric 1.21.1 with loader 0.16.10 has passed a real dependency download and launch-argument generation check. Full game-window verification for all loaders remains pending. NeoForge's official repository returned connection resets in the development environment. Forge and NeoForge processor execution also requires a compatible locally installed Java runtime.
-
-XMCL installer/core dependencies are pinned. The unzip dependency is pinned to 2.1.2 because the 2.2.0 published package references missing TypeScript sources and a workspace dependency.
-
-
-### 模组工作台
-
-内容工坊可按游戏版本、加载器和分类浏览。模组页面采用双栏紧凑列表：左侧是 Modrinth 搜索结果，右侧扫描当前实例的 mods 文件夹（含手动放入的 jar 和 jar.disabled）。已通过哈希识别的本地项目及待添加项目会从左侧隐藏。
-
-- 左侧选择版本后拖入右侧，或使用“加入”；右侧可指定版本、加入更新、暂存移除。此时不下载。草稿按实例保存在当前启动器会话中，退出应用后不保留。
-- “检查更新 / 前置”按文件 SHA-512 识别项目，比较当前游戏版本与加载器对应的最新正式版，并提示缺少的必需依赖。没有 Modrinth 记录的文件仍显示本地元信息，无法自动识别或更新时会明确提示。
-- “检查更改 / 补齐前置”生成可审阅清单；只在点击“应用更改并下载”后下载、校验、替换文件。检查必需依赖、版本约束和已声明的不兼容关系，不保证运行时无冲突。
-- 新文件全部下载成功后才提交更改；替换或移除的旧文件保存在实例的 mod-backups 下。下载失败不改变原模组；提交阶段发生可捕获错误时恢复旧文件。应用前后检查本地文件快照，拒绝覆盖编辑期间被外部修改的文件。
-- 点击名称查看信息，支持打开本地位置和 Modrinth 项目；CurseForge、MC 百科使用明确标注的名称搜索入口，不猜测跨站项目 ID。
-- 浏览其他游戏版本或加载器时禁止添加到当前实例，点击“匹配当前实例”恢复安装条件。
-
-验证：
+安装 Node.js 22，在项目目录依次执行：
 
 ```sh
 npm ci
 npm test
 npm run build
+npm start
 ```
 
-模组测试覆盖手动 JAR、哈希识别、兼容更新、前置、下载/提交失败回滚、过期清单，以及 Vue DOM 中的拖拽暂存和显式应用。DOM 测试不代替 Windows Electron 的资源管理器与真实游戏联调。
+[Windows 构建说明](docs/GITHUB-BUILD.md) · [MIT 许可证](LICENSE)
 
-
-### 0.1.1 下载与本地数据
-
-- 独立 EXE 默认把启动器配置、游戏运行文件与实例放在 EXE 同目录的 `.minecraft` 下；不会自动迁移原 AppData 数据。`CHENMENG_DATA_DIR` 显式覆盖仍有效，开发测试入口继续使用 `.dev-data`。移动便携版时应同时移动 `.minecraft`。Electron 自身缓存仍可能使用系统用户目录。
-- 设置支持自动（BMCLAPI 优先）、官方优先、BMCLAPI 优先，以及失败回退开关。镜像由 [BMCLAPI](https://bmclapidoc.bangbang93.com/) 提供，覆盖 Minecraft 元数据、资源、库以及 Fabric / Forge / NeoForge 文件；Modrinth 与微软登录保持各自原服务。失败、校验不符会重试并回退，关闭回退后不会换源。
-- 主进程通过 Electron Chromium 网络接口请求，避开 Node Undici 暂停解析器断言路径。没有通过捕获所有未处理异常来掩盖错误。
-- NeoForge 版本筛选支持 26.x 的完整版本前缀；安装仍需对应 Java，并取决于上游安装器兼容性。
-- 自动实例名包含加载器，例如 `26.1-fabric`，重名追加编号，保留手动名称。
+尘梦是独立社区项目，与 Mojang 和 Microsoft 没有关联，也未经其背书。

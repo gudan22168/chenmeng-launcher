@@ -94,6 +94,18 @@ ipcMain.handle('microsoft',async()=>{
   if(!safeStorage.isEncryptionAvailable())throw Error('系统安全存储不可用')
   signingIn=true
   try{
+    const saved = store.data.savedMicrosoft
+    if (saved && store.data.credential) {
+      try {
+        const restored = await microsoftSessionFor(saved)
+        store.data.account = {name: restored.name, uuid: restored.uuid, type: 'microsoft'}
+        store.data.savedMicrosoft = store.data.account
+        store.save()
+        return store.snapshot()
+      } catch (error) {
+        if (error.code !== 'invalid_grant' && error.code !== 'interaction_required') throw error
+      }
+    }
     const device=await deviceCode(id)
     const deadline=Date.now()+device.expires_in*1000
     const url=new URL(device.verification_uri)
@@ -108,6 +120,7 @@ ipcMain.handle('microsoft',async()=>{
     store.data.clientId=id
     store.data.credential=encrypted
     store.data.account={name:next.name,uuid:next.uuid,type:next.type}
+    store.data.savedMicrosoft = store.data.account
     store.save()
     session=next
     return store.snapshot()
@@ -116,7 +129,10 @@ ipcMain.handle('microsoft',async()=>{
 async function launchAccount(){
   const account=store.data.account
   if(account.type!=='microsoft')return account
-  if(!session || session.expires<Date.now()+120000){
+  return microsoftSessionFor(account)
+}
+async function microsoftSessionFor(account){
+  if(!session || session.uuid !== account.uuid || session.expires<Date.now()+120000){
     const token=safeStorage.decryptString(Buffer.from(store.data.credential,'base64'))
     const tokens=await renew(clientId(),token)
     if(tokens.refresh_token){store.data.credential=protect(tokens.refresh_token);store.save()}
@@ -128,9 +144,23 @@ async function launchAccount(){
 ipcMain.handle('offline', (_, name) => {
   if(signingIn || gameStatus.busy)throw Error('请等待当前登录或游戏结束')
   store.setAccount(name)
-  delete store.data.credential
-  session=null
-  store.save()
+  return store.snapshot()
+})
+ipcMain.handle('clearMicrosoft', async () => {
+  if(signingIn || gameStatus.busy)throw Error('请等待当前登录或游戏结束')
+  signingIn = true
+  try {
+    const answer = await dialog.showMessageBox(win, {
+      type: 'question', message: '清除这台电脑上保存的正版账户？',
+      detail: '下次使用正版账户时需要重新授权。', buttons: ['取消', '清除账户'], defaultId: 0, cancelId: 0
+    })
+    if (answer.response === 1) {
+      store.clearMicrosoft()
+      session = null
+    }
+  } finally {
+    signingIn = false
+  }
   return store.snapshot()
 })
 ipcMain.handle('versions', async () => {
