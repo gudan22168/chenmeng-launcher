@@ -175,8 +175,15 @@ export function registerTranslations({store,ipcMain,dialog,shell,win,ai,isBusy})
             ])
             const translated=parseTranslation(text,groups[i])
             for(const r of d.rows)if(Object.hasOwn(translated,r.id))r.value=translated[r.id]
-            await cache(d)
-          }catch(e){return {...view(d),error:'第 '+(i+1)+' 批失败：'+e.message+'。已完成译文保留，可重试剩余条目。'}}
+          } catch (error) {
+            const choice = await dialog.showMessageBox(win, {
+              type:'question', message:'第 '+(i+1)+' / '+groups.length+' 批翻译失败',
+              detail:error.message+'。已完成的译文会保留。', buttons:['暂停，保留草稿','本批使用原文，继续'], defaultId:0, cancelId:0
+            })
+            if (choice.response !== 1) return {...view(d),error:'翻译已暂停，可以重试，或用原文补齐后导出。'}
+            for (const row of groups[i]) row.value = row.source
+          }
+          await cache(d)
         }
         return view(d)
       })

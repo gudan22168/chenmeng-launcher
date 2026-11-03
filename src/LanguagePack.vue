@@ -21,6 +21,11 @@ watch(selected,()=>{source.value=locales.value.includes('en_us')?'en_us':locales
 watch(()=>props.instance.id,()=>{reset();act(scan)})
 async function prepare(){draft.value=await api.languagePrepare(props.instance.id,[...chosen.value],source.value,target.value);page.value=0;if(!draft.value.rows.length)message.value='没有缺失条目：可能已有目标语言，或此源语言没有内容。'}
 async function translate(){draft.value=await api.languageTranslate(props.instance.id,draft.value.token,values(),glossary());message.value=draft.value.error||'本次请求结束，已完成的译文已保存。'}
+async function exportWithOriginals(){
+  if (!window.confirm('将 '+missing.value+' 条空白译文按原文写入资源包？已填写的译文会保留。')) return
+  for (const row of draft.value.rows) if (!row.value.trim()) row.value = row.source
+  await exportPack()
+}
 async function exportPack(){const name=await api.languageExport(props.instance.id,draft.value.token,values());message.value='已更新 '+name+'。请在游戏的资源包设置中启用。'}
 let unsubscribe
 onMounted(()=>{act(scan);unsubscribe=window.onLanguageProgress?.(p=>{if(p.token===draft.value?.token)progress.value='正在翻译第 '+p.index+' / '+p.total+' 批…'})})
@@ -46,7 +51,7 @@ onUnmounted(()=>unsubscribe?.())
 <p role="status">{{progress||message}}</p>
 <template v-if="draft">
 <p v-for="note in draft.notices" :key="note">{{note}}</p><p>待补译 {{draft.rows.length}} 条 · 尚未填写 {{missing}} 条 · 已跳过 {{draft.skipped}} 条 · 原文约 {{draft.rows.reduce((n,r)=>n+r.source.length,0)}} 字符</p>
-<div class="language-controls"><button :disabled="disabled||!missing" @click="act(translate)">AI 翻译剩余 {{missing}} 条</button><button :disabled="disabled||missing>0||!draft.rows.length" @click="act(exportPack)">校验并更新合并资源包</button></div>
+<div class="language-controls"><button :disabled="disabled||!missing" @click="act(translate)">AI 翻译剩余 {{missing}} 条</button><button v-if="missing" :disabled="disabled" @click="act(exportWithOriginals)">空白使用原文并导出</button><button :disabled="disabled||missing>0||!draft.rows.length" @click="act(exportPack)">校验并更新合并资源包</button></div>
 <div v-for="row in shown" :key="row.id" class="language-row">
 <code>{{row.namespace}} · {{row.key}}</code><small v-if="row.changed">原文已变化 · 旧译文：{{row.previous}}</small><div class="language-pair"><pre>{{row.source}}</pre><textarea v-model="row.value" :disabled="disabled" rows="3" aria-label="可编辑译文"/></div>
 </div>

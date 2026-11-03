@@ -1,4 +1,5 @@
 import {configureNetwork} from './sources.mjs'
+import {registerUpdates} from './launcher-update.mjs'
 import {dataRoot} from './data-root.mjs'
 import { Downloads, getJSON } from './downloads.mjs'
 import { prepare, launch, detectJava, checkJava } from './vanilla.mjs'
@@ -258,6 +259,7 @@ function enqueue(startGame) {
     throw error
   }
 }
+registerUpdates({app,ipcMain,dialog,shell,win,busy:()=>signingIn || gameStatus.busy || queue.snapshot().some(job=>['queued','running','cancelling'].includes(job.status))})
 ipcMain.handle('install', () => enqueue(false))
 ipcMain.handle('play', () => enqueue(true))
 if (process.env.CHENMENG_DEV_URL === 'http://127.0.0.1:5173') await win.loadURL(process.env.CHENMENG_DEV_URL)
