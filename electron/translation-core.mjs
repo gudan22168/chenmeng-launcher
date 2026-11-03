@@ -55,3 +55,14 @@ export function mergeEntries(files,rows,target){
   }
   return result
 }
+
+export function incrementalEntry(text,key,builtin,existing,sources){
+ const previous=sources?.[key]
+ const changed=Object.hasOwn(existing,key)&&typeof previous==='string'&&previous!==text
+ if(!text.trim()||Object.hasOwn(builtin,key)||(Object.hasOwn(existing,key)&&!changed))return null
+ return {changed,previous:changed?existing[key]:null}
+}
+export function validateGlossary(glossary){
+ if(!Array.isArray(glossary)||glossary.length>200||glossary.some(r=>!r||typeof r.source!=='string'||typeof r.target!=='string'||!r.source.trim()||!r.target.trim()||r.source.length>100||r.target.length>100))throw Error('术语表最多 200 项，每项原文和译文各最多 100 字符')
+ return glossary
+}

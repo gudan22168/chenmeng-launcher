@@ -62,7 +62,7 @@ ipcMain.handle('cover', async () => {
   return 'data:image/'+ext+';base64,'+(await readFile(file)).toString('base64')
 })
 Menu.setApplicationMenu(null)
-const win = new BrowserWindow({icon:path.join(here,'icon.png'),frame:false,autoHideMenuBar:true,backgroundColor:"#F2F0E6",width:1180,height:760,minWidth:340,minHeight:230,webPreferences:{preload:path.join(here,'preload.cjs'),sandbox:true}})
+const win = new BrowserWindow({icon:path.join(here,'icon.png'),frame:false,autoHideMenuBar:true,backgroundColor:"#F2F0E6",width:1180,height:760,minWidth:340,minHeight:230,webPreferences:{spellcheck:false,preload:path.join(here,'preload.cjs'),sandbox:true}})
 ipcMain.handle('windowAction', (event, action) => {
   const target = BrowserWindow.fromWebContents(event.sender)
   if (!target) return
