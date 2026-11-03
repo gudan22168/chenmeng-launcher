@@ -1,7 +1,7 @@
 {
   "name": "chenmeng-launcher",
   "productName": "尘梦启动器",
-  "version": "0.1.1",
+  "version": "1.0.0",
   "private": true,
   "description": "每个世界，一页梦境。A paper and watercolor Minecraft Java launcher.",
   "type": "module",
