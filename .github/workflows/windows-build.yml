@@ -1,0 +1,50 @@
+name: Windows portable build
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Tests
+        shell: pwsh
+        run: |
+          node --test --test-reporter=spec tests/*.test.mjs 2>&1 | Tee-Object -FilePath test-results.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build frontend
+        run: npm run build
+      - name: Package Windows portable exe
+        run: npx --no-install electron-builder --win portable --x64 --publish never --config.electronDist=node_modules/electron/dist
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChenMeng-Windows-x64-${{ github.run_number }}
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-log-${{ github.run_number }}
+          path: test-results.log
+          if-no-files-found: ignore
+          retention-days: 14

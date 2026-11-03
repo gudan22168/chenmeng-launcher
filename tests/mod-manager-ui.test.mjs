@@ -4,7 +4,7 @@ import {readFile,writeFile,mkdtemp,rm} from 'node:fs/promises'
 import {parse,compileScript} from '@vue/compiler-sfc'
 import {Window} from 'happy-dom'
 const dom=new Window({url:'http://localhost/'})
-for(const k of ['window','document','navigator','HTMLElement','SVGElement','Element','Node','sessionStorage'])Object.defineProperty(globalThis,k,{value:k==='window'?dom:dom[k],configurable:true})
+for(const k of ['window','document','navigator','HTMLElement','SVGElement','Element','Node','sessionStorage','localStorage'])Object.defineProperty(globalThis,k,{value:k==='window'?dom:dom[k],configurable:true})
 const calls=[]
 let failPlan=true,failApply=true
 window.launcher={
@@ -21,7 +21,8 @@ const source=await readFile('src/ModManager.vue','utf8'),{descriptor}=parse(sour
 const compiled=compileScript(descriptor,{id:'test-mod-manager',inlineTemplate:true})
 const temporary=await mkdtemp(new URL('./.vue-test-',import.meta.url))
 const compiledFile=temporary+'/compiled.mjs'
-await writeFile(compiledFile,compiled.content)
+// Compiled component lives in a temporary directory; preserve its source-relative helper import.
+await writeFile(compiledFile,compiled.content.replaceAll("'./mod-aliases.mjs'",JSON.stringify(new URL('../src/mod-aliases.mjs',import.meta.url).href)).replaceAll('"./mod-aliases.mjs"',JSON.stringify(new URL('../src/mod-aliases.mjs',import.meta.url).href)))
 try{
  const {createApp,nextTick}=await import('vue'),{default:Component}=await import(pathToFileURL(compiledFile).href)
  const root=document.createElement('div');document.body.append(root)
@@ -56,6 +57,9 @@ try{
  button('确认下载并应用更改').click();await flush()
  assert.equal(calls.filter(c=>c[0]==='apply').length,2)
  assert(!document.querySelector('dialog').open,'queued download closes confirmation')
+ assert.equal(root.querySelectorAll('.batch-toolbar').length,0,'batch controls start collapsed')
+ button('批量编辑').click();await flush()
+ assert.equal(root.querySelectorAll('.batch-toolbar').length,2,'batch controls expand on demand')
  const localCheckbox=root.querySelector('input[aria-label="选择本地模组 Local Mod"]')
  localCheckbox.checked=true;localCheckbox.dispatchEvent(new dom.Event('change',{bubbles:true}));await flush()
  button('批量禁用').click();await flush()
