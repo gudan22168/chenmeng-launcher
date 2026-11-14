@@ -57,7 +57,7 @@ export async function safeTarget(root,relative){
 }
 export function downloadURL(url){
   const parsed=requireHTTPS(url)
-  if(!['cdn.modrinth.com','github.com','raw.githubusercontent.com','gitlab.com'].includes(parsed.hostname))throw Error('整合包包含不支持的下载域名：'+parsed.hostname)
+  if(!['cdn.modrinth.com','github.com','raw.githubusercontent.com','gitlab.com','mediafilez.forgecdn.net','edge.forgecdn.net'].includes(parsed.hostname))throw Error('整合包包含不支持的下载域名：'+parsed.hostname)
   return parsed.href
 }
 export async function resolveContent(instance,versionId,existing=[],{pins=new Map(),dependencyMode='resolve'}={}){
