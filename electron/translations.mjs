@@ -126,7 +126,7 @@ export function registerTranslations({store,ipcMain,dialog,shell,win,ai,isBusy})
       }
       const data={files,hash:JSON.stringify(mods)}
       if(!Object.keys(files).length)throw Error('没有可提取的标准 JSON 源语言文本，无法翻译，未提交 AI。可能是硬编码、旧式语言文件或无界面文本。')
-      const client=await safeTarget(store.root,'runtime/versions/'+instance.version+'/client.jar')
+      const client=store.versionClientPath(id)
       const entry=new AdmZip(client).getEntry('version.json')
       if(!entry||entry.header.size>1024*1024)throw Error('请先安装当前游戏版本')
       const metadata=packMetadata(JSON.parse(entry.getData().toString()))

@@ -149,7 +149,8 @@ export function registerDirectoryImport({store,queue,ipcMain,dialog,shell,win,is
         }catch(e){
           if(instance){
             const target=store.directory(instance.id)
-            if(path.dirname(target)!==path.join(store.root,'instances'))throw Error('导入目录校验失败，已停止清理')
+            const expected=instance.layout==='standard'?path.resolve(store.root,'versions',instance.directoryName):path.resolve(store.root,'instances',instance.id)
+            if(path.resolve(target)!==expected || !['standard',undefined].includes(instance.layout))throw Error('导入目录校验失败，已停止清理')
             store.data.instances=store.data.instances.filter(i=>i.id!==instance.id)
             if(store.data.selectedId===instance.id)store.data.selectedId=previous
             store.save()

@@ -31,13 +31,24 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build frontend
         run: npm run build
-      - name: Package Windows portable exe
-        run: npx --no-install electron-builder --win portable --x64 --publish never --config.electronDist=node_modules/electron/dist
+      - name: Package Windows portable and ZIP editions
+        run: npx --no-install electron-builder --win portable zip --x64 --publish never --config.electronDist=node_modules/electron/dist
+      - name: Verify packaged archive imports
+        shell: pwsh
+        run: |
+          node scripts/archive-smoke.mjs "release/win-unpacked/尘梦启动器.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/archive-smoke.mjs "release/win-unpacked/尘梦启动器.exe" --rar
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/archive-smoke.mjs "release/win-unpacked/尘梦启动器.exe" --rar --picker
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
           name: ChenMeng-Windows-x64-${{ github.run_number }}
-          path: release/*.exe
+          path: |
+            release/*.exe
+            release/*.zip
           if-no-files-found: error
           retention-days: 30
       - name: Upload test log

@@ -7,7 +7,9 @@ import {installed,downloadURL,safeTarget} from './content.mjs'
 export const exportChoices=['mods','resourcepacks','shaderpacks','config','options.txt','saves','screenshots']
 const loaderKeys={forge:'forge',neoforge:'neoforge','fabric-loader':'fabric'}
 export function inspectPack(file){
-  const zip=new AdmZip(file)
+  return inspectPackEntries(new AdmZip(file))
+}
+export function inspectPackEntries(zip){
   const entry=zip.getEntry('modrinth.index.json')
   if(!entry || entry.header.size>4*1024*1024)throw Error('请选择包含 modrinth.index.json 的 .mrpack 整合包')
   const index=JSON.parse(entry.getData().toString('utf8'))
@@ -32,30 +34,6 @@ export function inspectPack(file){
     f.downloads.forEach(downloadURL)
   }
   return {zip,index,loader,loaderVersion:deps[loaders[0]] || ''}
-}
-export async function unpackPack(store,instance,pack,task,includeOptional=false){
-  const root=store.directory(instance.id)
-  const files=pack.index.files.filter(f=>f.env?.client!=='unsupported' && (includeOptional || f.env?.client!=='optional'))
-  for(let n=0;n<files.length;n++){
-    const f=files[n]
-    task.progress(n/Math.max(1,files.length)*90,'安装整合包 '+(n+1)+' / '+files.length)
-    let last
-    for(const url of f.downloads){
-      try{await task.download(downloadURL(url),await safeTarget(root,f.path),{...f.hashes,size:f.fileSize});last=null;break}catch(e){last=e}
-    }
-    if(last)throw last
-  }
-  for(const prefix of ['overrides/','client-overrides/']){
-    for(const entry of pack.zip.getEntries()){
-      if(entry.isDirectory || !entry.entryName.startsWith(prefix))continue
-      const dest=await safeTarget(root,entry.entryName.slice(prefix.length))
-      await fs.mkdir(path.dirname(dest),{recursive:true})
-      await fs.writeFile(dest,entry.getData())
-    }
-  }
-  instance.packFiles=files
-  instance.packImported=true
-  store.save()
 }
 export async function exportPack(store,instance,selection,destination,task){
   if(!Array.isArray(selection) || selection.some(s=>!exportChoices.includes(s)))throw Error('导出选项无效')

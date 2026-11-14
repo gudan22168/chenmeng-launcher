@@ -3,8 +3,6 @@ import path from 'node:path'
 import {promises as fs} from 'node:fs'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
-import {MinecraftFolder,Version,generateArguments} from '@xmcl/core'
-import {createModernForgeInstallWorkflow,createFabricInstallWorkflow,createNodeInstallRuntime,executeInstallWorkflow,resolveLibraryInstallFiles} from '@xmcl/installer'
 import {getJSON,USER_AGENT} from './downloads.mjs'
 import {inside,javaMajor,hashFile} from './util.mjs'
 import {checkJava,detectJava} from './vanilla.mjs'
@@ -33,10 +31,13 @@ export async function loaderVersions(game,loader){
   return versions.sort((a,b)=>b.localeCompare(a,undefined,{numeric:true}))
 }
 export async function prepareLoader(store,instance,base,task,account,natives){
-  const root=path.resolve(store.root,'runtime'),mc=MinecraftFolder.from(root)
+  const [{MinecraftFolder,Version,generateArguments},{createModernForgeInstallWorkflow,createFabricInstallWorkflow,createNodeInstallRuntime,executeInstallWorkflow,resolveLibraryInstallFiles}]=await Promise.all([import('@xmcl/core'),import('@xmcl/installer')])
+  const root=store.minecraftRoot(instance.id),mc=MinecraftFolder.from(root)
   const baseDir=inside(root,'versions/'+instance.version)
-  await fs.copyFile(path.join(baseDir,'version.json'),path.join(baseDir,instance.version+'.json'))
-  await fs.copyFile(path.join(baseDir,'client.jar'),path.join(baseDir,instance.version+'.jar'))
+  if(instance.layout!=='standard'){
+    await fs.copyFile(path.join(baseDir,'version.json'),path.join(baseDir,instance.version+'.json'))
+    await fs.copyFile(path.join(baseDir,'client.jar'),path.join(baseDir,instance.version+'.jar'))
+  }
   const major=javaMajor(base)
   const java=await checkJava(instance.javaPath || 'java',major) ? (instance.javaPath || 'java') : await detectJava(major)
   if(!java && instance.loader!=='fabric')throw Error('安装 '+instance.loader+' 需要 Java '+major+'，请在设置中选择兼容 Java 后重试')
@@ -87,7 +88,12 @@ export async function prepareLoader(store,instance,base,task,account,natives){
   const result=await executeInstallWorkflow(workflow,runtime,{signal:task.signal,onEvent:event=>{
     if(event.type==='task-start')task.progress(90,'安装 '+instance.loader+' · '+event.task.type)
   }})
-  const versionId=typeof result==='string'?result:result.version
+  let versionId=typeof result==='string'?result:result.version
+  if(instance.layout==='standard'){
+    const profile=JSON.parse(await fs.readFile(inside(root,'versions/'+versionId+'/'+versionId+'.json'),'utf8'))
+    versionId=instance.directoryName
+    await fs.writeFile(path.join(store.profileDirectory(instance.id),versionId+'.json'),JSON.stringify({...profile,id:versionId},null,2))
+  }
   const resolved=await Version.parse(root,versionId)
   await download(resolveLibraryInstallFiles(resolved.libraries,mc))
   const args=await generateArguments({

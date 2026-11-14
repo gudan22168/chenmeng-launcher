@@ -4,10 +4,9 @@ import path from 'node:path'
 import {promises as fs} from 'node:fs'
 import {randomUUID} from 'node:crypto'
 import {searchContent,versions,browseContext,packCompatible,installContent,installed,setInstalled,modrinth,safeTarget,downloadURL} from './content.mjs'
-import {inspectPack,unpackPack,exportPack} from './packs.mjs'
+import {inspectArchive,importArchive} from './archive-import.mjs'
 import {loaderVersions} from './loaders.mjs'
 import {getJSON} from './downloads.mjs'
-import {prepare} from './vanilla.mjs'
 
 export function registerContent({store,queue,ipcMain,dialog,shell,win,isBusy}){
   const current=()=>store.instance(store.data.selectedId)
@@ -104,29 +103,27 @@ export function registerContent({store,queue,ipcMain,dialog,shell,win,isBusy}){
     setInstalled(store,instance,records.filter(r=>r!==record))
     store.save()
   })
+  let importing=false
   async function importFile(file){
-    const pack=inspectPack(file)
-    const answer=await dialog.showMessageBox(win,{
-      type:'question',message:'导入「'+pack.index.name+'」？',
-      detail:'Minecraft '+pack.index.dependencies.minecraft+' · '+pack.loader+' '+pack.loaderVersion+'。将创建独立实例并安装游戏和加载器。',
-      checkboxLabel:'同时安装标为可选的客户端文件',checkboxChecked:false,buttons:['导入','取消'],cancelId:1
-    })
-    if(answer.response!==0)return
-    idle()
-    const instance=store.create({name:pack.index.name,version:pack.index.dependencies.minecraft,loader:pack.loader,loaderVersion:pack.loaderVersion,isolated:true})
-    instance.packPending=true
-    store.save()
-    return queue.add('导入整合包 · '+instance.name,async task=>{
-      await unpackPack(store,instance,pack,task,answer.checkboxChecked)
-      instance.packPending=false
-      store.save()
-      await prepare(store,instance,task)
-      task.progress(100,'整合包和游戏已就绪')
-    },instance.id)
+    if(importing)throw Error('正在读取或确认整合包，请稍候')
+    idle();importing=true
+    try{
+      const pack=await inspectArchive(file)
+      const answer=await dialog.showMessageBox(win,{
+        type:'question',message:'导入「'+pack.name+'」？',
+        detail:'Minecraft '+pack.version+' · '+pack.loader+' '+pack.loaderVersion+'。将复制到 .minecraft\\versions 下的独立版本目录，首次启动时检查并补全游戏文件。',
+        ...(pack.type==='mrpack'?{checkboxLabel:'同时安装标为可选的客户端文件',checkboxChecked:false}:{}),
+        buttons:['导入','取消'],defaultId:1,cancelId:1
+      })
+      if(answer.response!==0)return
+      idle()
+      return queue.add('导入整合包 · '+pack.name,task=>importArchive(store,file,pack,task,answer.checkboxChecked))
+    }finally{importing=false}
   }
+  ipcMain.handle('packImportFile',(_,file)=>importFile(file))
   ipcMain.handle('packImport',async()=>{
     idle()
-    const picked=await dialog.showOpenDialog(win,{properties:['openFile'],filters:[{name:'Modrinth 整合包',extensions:['mrpack']}]})
+    const picked=await dialog.showOpenDialog(win,{properties:['openFile'],filters:[{name:'Minecraft 整合包',extensions:['zip','rar','mrpack']}]})
     if(!picked.canceled)return importFile(picked.filePaths[0])
   })
   ipcMain.handle('packDownload',async(_,versionId)=>{
@@ -156,6 +153,6 @@ export function registerContent({store,queue,ipcMain,dialog,shell,win,isBusy}){
     const picked=await dialog.showSaveDialog(win,{defaultPath:instance.name.replace(/[<>:"/\\|?*]/g,'_')+'.mrpack',filters:[{name:'Modrinth 整合包',extensions:['mrpack']}]})
     if(picked.canceled)return
     idle()
-    return queue.add('导出整合包 · '+instance.name,task=>exportPack(store,instance,selection,picked.filePath,task),instance.id)
+    return queue.add('导出整合包 · '+instance.name,async task=>(await import('./packs.mjs')).exportPack(store,instance,selection,picked.filePath,task),instance.id)
   })
 }

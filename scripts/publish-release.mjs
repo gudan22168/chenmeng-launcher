@@ -14,9 +14,10 @@ const existing=releases.find(r=>r.tag_name===tag)
 if(existing&&!existing.draft){console.log(tag+' already published; immutable assets preserved');process.exit(0)}
 if(existing&&existing.target_commitish!==sha)throw Error('Draft belongs to a different commit; refusing overwrite')
 const exe='release/ChenMeng-Launcher-'+pkg.version+'-portable.exe'
-const hash=createHash('sha256').update(fs.readFileSync(exe)).digest('hex')
-fs.writeFileSync('release/SHA256SUMS.txt',hash+'  '+path.basename(exe)+'\n')
+const zip='release/ChenMeng-Launcher-'+pkg.version+'-x64.zip'
+const assets=[exe,zip]
+fs.writeFileSync('release/SHA256SUMS.txt',assets.map(file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex')+'  '+path.basename(file)).join('\n')+'\n')
 if(!existing)gh('release','create',tag,'--draft','--target',sha,'--title','尘梦启动器 '+tag,'--notes-file',notes)
-gh('release','upload',tag,exe,'release/SHA256SUMS.txt','--clobber')
+gh('release','upload',tag,...assets,'release/SHA256SUMS.txt','--clobber')
 gh('release','edit',tag,'--draft=false',pkg.version.includes('-')?'--prerelease':'--latest')
 console.log('Published '+tag+' at '+sha)

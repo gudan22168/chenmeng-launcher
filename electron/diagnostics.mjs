@@ -85,7 +85,7 @@ export async function collectDiagnostics(store,id,{secrets=[],status='',gpu={}}=
   }
   let requiredJava=null
   try{
-    const meta=JSON.parse(await fs.readFile(path.join(store.root,'runtime','versions',instance.version,'version.json'),'utf8'))
+    const meta=JSON.parse(await fs.readFile(store.versionMetadataPath(id),'utf8'))
     requiredJava=meta.javaVersion?.majorVersion||null
   }catch{}
   const context={minecraft:instance.version,loader:instance.loader,loaderVersion:instance.loaderVersion,java,requiredJava,

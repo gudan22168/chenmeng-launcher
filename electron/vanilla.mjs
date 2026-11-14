@@ -12,10 +12,10 @@ const manifestUrl = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.
 
 export async function prepare(store, instance, task, account=store.data.account) {
   if(instance.packPending)throw Error('整合包尚未完成导入，请从内容页重试导入')
-  const root = path.resolve(store.root,'runtime')
+  const root = store.minecraftRoot(instance.id)
   const game = path.resolve(store.directory(instance.id))
   const versionDir = inside(root, 'versions/'+instance.version)
-  const metadata = path.join(versionDir,'version.json')
+  const metadata = store.versionMetadataPath(instance.id)
   const cached = instance.metadataHash && await hashFile(metadata).catch(()=>null) === instance.metadataHash
   if (!cached) {
     const manifest = await getJSON(manifestUrl,task.signal)
@@ -51,7 +51,7 @@ export async function prepare(store, instance, task, account=store.data.account)
       archives.push([dest,lib.extract?.exclude || []])
     }
   }
-  const client = path.join(versionDir,'client.jar')
+  const client = store.versionClientPath(instance.id)
   cp.push(client)
   files.push([meta.downloads.client,client])
   const index = inside(assets,'indexes/'+meta.assetIndex.id+'.json')
@@ -77,6 +77,7 @@ export async function prepare(store, instance, task, account=store.data.account)
     }
   }
   if(instance.loader!=='vanilla')return prepareLoader(store,instance,meta,task,account,natives)
+  if(instance.layout==='standard' && instance.directoryName!==instance.version)await fs.writeFile(path.join(store.profileDirectory(instance.id),instance.directoryName+'.json'),JSON.stringify({id:instance.directoryName,inheritsFrom:instance.version},null,2))
   instance.status='installed'
   store.save()
 
@@ -121,4 +122,3 @@ export async function launch(instance, plan, onExit,title) {
     }
   } finally {await log.close()}
 }
-

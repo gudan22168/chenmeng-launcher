@@ -64,6 +64,7 @@ ipcMain.handle('cover', async () => {
 })
 Menu.setApplicationMenu(null)
 const win = new BrowserWindow({icon:path.join(here,'icon.png'),frame:false,autoHideMenuBar:true,backgroundColor:"#F2F0E6",width:1180,height:760,minWidth:340,minHeight:230,webPreferences:{spellcheck:false,preload:path.join(here,'preload.cjs'),sandbox:true}})
+if(process.env.CHENMENG_STARTUP_TRACE==='1')win.webContents.once('did-finish-load',()=>console.log('[startup-ready-ms]',Math.round(process.uptime()*1000)))
 ipcMain.handle('windowAction', (event, action) => {
   const target = BrowserWindow.fromWebContents(event.sender)
   if (!target) return
@@ -268,5 +269,3 @@ app.on('window-all-closed',()=>app.quit())
 
 
 }).catch(error => { dialog.showErrorBox('尘梦启动器', error.message); app.quit() })
-
-

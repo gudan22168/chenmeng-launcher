@@ -1,14 +1,14 @@
 <script setup>
-import {ref,computed,onMounted,onUnmounted,watch} from 'vue'
+import {ref,computed,onMounted,onUnmounted,watch,defineAsyncComponent} from 'vue'
 import {House, LibraryBig, Palette, Settings, Box, ArrowRightLeft, Ellipsis, Play, Minus, Square, X, Bookmark,FileText} from 'lucide-vue-next'
-import Content from './Content.vue'
-import Diagnostics from './Diagnostics.vue'
-import AISettings from './AISettings.vue'
-import {aliases,clearAliases} from './mod-aliases.mjs'
+const Content=defineAsyncComponent(()=>import('./Content.vue'))
+const Diagnostics=defineAsyncComponent(()=>import('./Diagnostics.vue'))
+const AISettings=defineAsyncComponent(()=>import('./AISettings.vue'))
+import {aliases,clearAliases,loadAliases} from './mod-aliases.mjs'
 const clearAliasConfirm=ref(false)
-import DirectoryImport from './DirectoryImport.vue'
+const DirectoryImport=defineAsyncComponent(()=>import('./DirectoryImport.vue'))
 import {instanceName} from './instance-name.mjs'
-import Journal from './Journal.vue'
+const Journal=defineAsyncComponent(()=>import('./Journal.vue'))
 import packageInfo from '../package.json'
 import brand from './brand.webp'
 import journalCover from './journal-cover.webp'
@@ -16,6 +16,9 @@ import avatar from './avatar.webp'
 const api=window.launcher, page=ref('主页'), state=ref(null), cover=ref(''), notice=ref(''), name=ref(''), version=ref('1.21.1')
 const miniQuery=window.matchMedia('(max-width: 480px), (max-height: 320px)')
 const mini=ref(miniQuery.matches)
+let stopPackDrop=()=>{}
+onMounted(()=>{stopPackDrop=window.onPackDrop?.(({file,error})=>{if(error){notice.value=error;return}notice.value='正在读取整合包…';queueTask(()=>api.packImportFile(file))})||(()=>{})})
+onUnmounted(()=>stopPackDrop())
 const visiblePage=computed(()=>mini.value?'主页':page.value)
 function resizeMode(event){mini.value=event.matches}
 miniQuery.addEventListener('change',resizeMode)
@@ -73,7 +76,9 @@ async function localUpdate(){
   catch(error){updateMessage.value=error.message}
   finally{updateBusy.value=false}
 }
-onMounted(()=>{if(api?.launcherUpdateCheck)checkUpdates(true)})
+let updateTimer
+onMounted(()=>{updateTimer=setTimeout(()=>{if(api?.launcherUpdateCheck)checkUpdates(true)},3000)})
+onUnmounted(()=>clearTimeout(updateTimer))
 const msBusy=ref(false)
 async function microsoft(action = 'microsoft'){
   msBusy.value=true
@@ -113,11 +118,13 @@ async function run(action){
   try {const result=await action(); if(result){state.value=result;cover.value='';cover.value=await api.cover()}} catch(e){notice.value=e.message}
 }
 onMounted(()=>{if(api){window.onDiagnostic?.(id=>{if(state.value?.selectedId===id)navigate('诊断')});window.onPackReady(file=>pendingPack.value=file);window.onJobs(receiveJobs);api.jobs().then(receiveJobs);window.onGameStatus(s=>gameStatus.value=s);api.gameStatus().then(s=>gameStatus.value=s);run(()=>api.state())}})
-function navigate(target){returning=null;page.value=target;notice.value='';accountOpen.value=false;if(target==='实例' && !versions.value.length)loadVersions()}
+function navigate(target){if(target==='设置')loadAliases();returning=null;page.value=target;notice.value='';accountOpen.value=false;if(target==='实例' && !versions.value.length)loadVersions()}
 async function queueTask(action){
   const origin=page.value
   try {
     const id=await action()
+    if(!id){notice.value='';return}
+    notice.value=''
     if(page.value!==origin)return
     if(mini.value)return
     navigate('下载')
@@ -142,8 +149,8 @@ const folders={'实例目录':'','存档':'saves','游戏截图':'screenshots','
 <section class="journey"><div class="world"><small>继续你的旅程</small><h1>{{current?.name || '尚无实例'}}</h1><div class="meta">MINECRAFT {{current?.version || '1.21.1'}}　/　{{(current?.loader || 'vanilla').toUpperCase()}}</div><aside><Bookmark/> {{current?.lastPlayed ? '上次游玩 · '+ new Date(current.lastPlayed).toLocaleString('zh-CN') : '新的旅程'}}</aside></div>
 <div class="switch"><button @click="navigate('实例')"><ArrowRightLeft/> 切换游戏</button><button title="实例目录" aria-label="打开实例目录" @click="run(()=>api.folder(''))"><Ellipsis/></button></div>
 <div class="launch"><button class="primary" :disabled="gameStatus.busy || !current" @click="startPlay()"><Play/>{{gameStatus.busy?'游戏进行中':'启动游戏'}}</button><small>{{gameStatus.busy?'IN PROGRESS':'JAVA EDITION'}}</small></div></section>
-</main><main v-else-if="visiblePage==='实例'"><small>WORLD JOURNAL　/　01</small><h2>游戏实例</h2><label>当前实例 <select :value="current?.id" @change="run(()=>api.select($event.target.value))"><option v-for="i in state?.instances" :value="i.id">{{i.name}} · {{i.version}}</option></select></label><button :disabled="!current" @click="run(()=>api.java())">选择 Java</button><button :disabled="!current || gameStatus.busy" @click="install">检查并下载当前版本</button><button :disabled="!current || gameStatus.busy" @click="run(()=>api.removeInstance(current.id))">删除实例</button><h3>快捷目录</h3><button :disabled="!current" v-for="(dir,label) in folders" @click="run(()=>api.folder(dir))">{{label}} ↗</button><h3>新建并安装实例</h3><form @submit.prevent="create"><input required v-model.trim="name" placeholder="实例名称"><select v-if="versions.length" v-model="version" aria-label="官方正式版"><option v-for="v in versions" :key="v">{{v}}</option></select><input v-else required v-model.trim="version" aria-label="游戏版本"><small>{{loadingVersions ? '正在读取官方版本列表…' : versionError}}</small><button v-if="versionError" type="button" @click="loadVersions">重试</button><label>加载器 <select v-model="loader"><option value="vanilla">原版</option><option value="fabric">Fabric</option><option value="forge">Forge</option><option value="neoforge">NeoForge</option></select></label><select v-if="loader!=='vanilla'" v-model="loaderVersion" :disabled="loaderBusy" aria-label="加载器版本"><option v-for="v in loaderOptions" :value="v">{{v}}</option></select><small>{{loaderBusy?'读取加载器版本…':loaderError}}</small><button v-if="loaderError" type="button" @click="const old=loader;loader='vanilla';$nextTick(()=>loader=old)">重试列表</button><button :disabled="gameStatus.busy || loaderBusy || (loader!=='vanilla' && !loaderVersion)">创建并安装</button></form><DirectoryImport :busy="gameStatus.busy || !!activeJob" @task="id=>queueTask(()=>Promise.resolve(id))"/></main>
-<Content v-else-if="visiblePage==='内容' && current" :key="current.id" :instance="current" :busy="gameStatus.busy || !!activeJob" @task="contentTask"/><main v-else-if="visiblePage==='内容'"><h2>内容工坊</h2><button @click="navigate('实例')">先创建实例</button><button @click="api.packImport().then(contentTask).catch(e=>notice=e.message)">导入 .mrpack</button></main>
+</main><main v-else-if="visiblePage==='实例'"><small>WORLD JOURNAL　/　01</small><h2>游戏实例</h2><label>当前实例 <select :value="current?.id" @change="run(()=>api.select($event.target.value))"><option v-for="i in state?.instances" :value="i.id">{{i.name}} · {{i.version}}</option></select></label><button :disabled="!current" @click="run(()=>api.java())">选择 Java</button><button :disabled="!current || gameStatus.busy" @click="install">检查并下载当前版本</button><button :disabled="!current || gameStatus.busy" @click="run(()=>api.removeInstance(current.id))">删除实例</button><h3>快捷目录</h3><button :disabled="!current" v-for="(dir,label) in folders" @click="run(()=>api.folder(dir))">{{label}} ↗</button><h3>新建并安装实例</h3><form @submit.prevent="create"><input required v-model.trim="name" placeholder="实例名称"><select v-if="versions.length" v-model="version" aria-label="官方正式版"><option v-for="v in versions" :key="v">{{v}}</option></select><input v-else required v-model.trim="version" aria-label="游戏版本"><small>{{loadingVersions ? '正在读取官方版本列表…' : versionError}}</small><button v-if="versionError" type="button" @click="loadVersions">重试</button><label>加载器 <select v-model="loader"><option value="vanilla">原版</option><option value="fabric">Fabric</option><option value="forge">Forge</option><option value="neoforge">NeoForge</option></select></label><select v-if="loader!=='vanilla'" v-model="loaderVersion" :disabled="loaderBusy" aria-label="加载器版本"><option v-for="v in loaderOptions" :value="v">{{v}}</option></select><small>{{loaderBusy?'读取加载器版本…':loaderError}}</small><button v-if="loaderError" type="button" @click="const old=loader;loader='vanilla';$nextTick(()=>loader=old)">重试列表</button><button :disabled="gameStatus.busy || loaderBusy || (loader!=='vanilla' && !loaderVersion)">创建并安装</button></form><div class="pack-import"><button :disabled="gameStatus.busy || !!activeJob" @click="queueTask(()=>api.packImport())">导入 ZIP / RAR / .mrpack</button><small>也可将整合包拖到窗口中导入</small></div><DirectoryImport :busy="gameStatus.busy || !!activeJob" @task="id=>queueTask(()=>Promise.resolve(id))"/></main>
+<Content v-else-if="visiblePage==='内容' && current" :key="current.id" :instance="current" :busy="gameStatus.busy || !!activeJob" @task="contentTask"/><main v-else-if="visiblePage==='内容'"><h2>内容工坊</h2><button @click="navigate('实例')">先创建实例</button><button @click="api.packImport().then(contentTask).catch(e=>notice=e.message)">导入 ZIP / RAR / .mrpack</button></main>
 <Journal v-else-if="visiblePage==='世界手记' && current" :key="current.id" :instance="current"/><main v-else-if="visiblePage==='世界手记'"><h2>世界手记</h2><button @click="navigate('实例')">先创建实例</button></main>
 <Diagnostics v-else-if="visiblePage==='诊断' && current" :key="current.id" :instance="current"/><main v-else-if="visiblePage==='诊断'"><h2>日志与诊断</h2><p>先创建或导入实例，再查看它的日志。</p><button @click="navigate('实例')">前往实例</button></main>
 <main v-else-if="visiblePage==='下载'" class="downloads"><small>WORLD JOURNAL　/　DOWNLOADS</small><h2>下载任务</h2><button v-if="pendingPack" :disabled="!!activeJob || gameStatus.busy" @click="api.packImportDownloaded(pendingPack).then(async id=>{if(id){pendingPack='';await contentTask(id)}}).catch(e=>notice=e.message)">整合包已下载 · 确认导入</button><p v-if="!jobs.length">还没有下载任务。到实例页选择游戏版本，即可检查并补全文件。</p><button v-if="!jobs.length" @click="navigate('实例')">前往实例</button>
@@ -151,7 +158,3 @@ const folders={'实例目录':'','存档':'saves','游戏截图':'screenshots','
 <main v-else-if="visiblePage==='外观'"><small>WORLD JOURNAL　/　02</small><h2>主页封面</h2><p>自动封面取自当前实例最近的游戏截图。</p><button v-for="(label,mode) in {auto:'游戏截图',default:'默认山景',fixed:'固定图片'}" :class="{active:state?.settings.coverMode===mode}" @click="run(()=>mode==='fixed'?api.choose():api.settings(mode))">{{label}}</button></main>
 <main v-else><small>WORLD JOURNAL　/　03</small><h2>启动设置</h2><section class="prefs"><h3>启动器更新</h3><p>{{updateMessage || '启动时自动检查正式版'}}</p><button :disabled="updateBusy" @click="checkUpdates()">检查更新</button><template v-if="updateInfo?.available"><button @click="api.launcherUpdateDownload()">下载新版便携包</button><button :disabled="updateBusy" @click="localUpdate()">从本地 EXE 安装更新</button></template></section><section v-if="state" class="prefs"><template v-if="current"><h3>{{current.name}} · 游戏运行</h3><label>游戏最大内存（MiB） <input type="number" min="1024" :max="state.system.memory-512" :value="current.memory" @change="run(()=>api.options({memory:Number($event.target.value)}))"></label><small>系统已用 {{(state.system.used/1024).toFixed(1)}} / {{(state.system.memory/1024).toFixed(1)}} GiB · 游戏分配 {{Math.round(100*current.memory/state.system.memory)}}%</small><button :disabled="!current" @click="run(()=>api.java())">选择 Java</button><small>{{current.javaPath || '启动时自动配置'}}</small></template><p v-else>尚无实例，可以先设置下载源和启动器选项。</p><h3>下载与文件</h3><label>下载源 <select :value="state.settings.downloadSource || 'auto'" @change="run(()=>api.options({downloadSource:$event.target.value}))"><option value="auto">自动（镜像优先，故障暂时避让）</option><option value="official">官方优先</option><option value="bmclapi">BMCLAPI 镜像优先</option></select></label><label><input type="checkbox" :checked="state.settings.downloadFallback!==false" @change="run(()=>api.options({downloadFallback:$event.target.checked}))"> 失败时回退到另一下载源</label><small>覆盖 Minecraft 与加载器文件；Modrinth 和微软登录保持原服务。镜像由 BMCLAPI 提供。</small><small>游戏数据目录：{{state.system.dataPath}}</small><small>独立 EXE 默认使用同目录下的 .minecraft。移动时请把它和 EXE 一起移动。</small><h3>所有实例</h3><label><input type="checkbox" :checked="state.settings.isolated" @change="run(()=>api.options({isolated:$event.target.checked}))"> 开启版本隔离</label><small>关闭后使用共享存档与模组目录。切换不会搬移文件。</small><label><input type="checkbox" :checked="state.settings.closeOnLaunch" @change="run(()=>api.options({closeOnLaunch:$event.target.checked}))"> 游戏启动后隐藏启动器，退出时恢复</label><label>游戏窗口标题 <input maxlength="100" placeholder="使用游戏默认标题" :value="state.settings.gameTitle" @change="run(()=>api.options({gameTitle:$event.target.value}))"></label><h3>模组别名</h3><p>已保存 {{Object.keys(aliases).length}} 个别名（仅本机）。</p><button @click="clearAliasConfirm=true">清除别名对照表</button><div v-if="clearAliasConfirm">清除后将恢复原名显示与搜索。<button @click="clearAliases();clearAliasConfirm=false">确认清除</button><button @click="clearAliasConfirm=false">取消</button></div><AISettings/></section></main><footer role="status"><span>尘梦　/　{{packageInfo.version}}　世界手记</span><span :title="notice || activeJob?.stage || gameStatus.message"><Box/> {{notice || (activeJob ? activeJob.stage+' · '+Math.floor(activeJob.percent)+'%' : gameStatus.message) || '就绪'}}</span></footer>
 </template>
-
-
-
-

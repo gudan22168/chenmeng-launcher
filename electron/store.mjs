@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync } from '
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import os from 'node:os'
-import { assertText, playerName, offlineUUID } from './util.mjs'
+import { assertText, playerName, offlineUUID, inside } from './util.mjs'
 
 export const defaultSettings = {
   downloadSource:'auto', downloadFallback:true, language: 'zh', surface: 'paper', background: '#F2F0E6', ink: '#130918', accent: '#FE4B5E',
@@ -39,18 +39,37 @@ export class Store {
     if (!instance) throw new Error('实例不存在 / Instance not found')
     return instance
   }
-  directory(id) { return (this.data.settings.isolated || this.instance(id).isolated) ? path.join(this.root, 'instances', this.instance(id).id) : path.join(this.root,'shared') }
+  profileDirectory(id) {
+    const instance=this.instance(id)
+    if(instance.layout!=='standard')return path.join(this.root,'instances',instance.id)
+    if(!/^[\w.+-]{1,160}$/.test(instance.directoryName) || ['.','..'].includes(instance.directoryName))throw Error('版本目录无效')
+    return path.join(this.root,'versions',instance.directoryName)
+  }
+  directory(id) {
+    const instance=this.instance(id),isolated=this.data.settings.isolated || instance.isolated
+    if(instance.layout==='standard')return isolated?this.profileDirectory(id):this.root
+    return isolated?path.join(this.root,'instances',instance.id):path.join(this.root,'shared')
+  }
+  minecraftRoot(id) { return path.resolve(this.root,this.instance(id).layout==='standard'?'':'runtime') }
+  versionDirectory(id) { return path.join(this.minecraftRoot(id),'versions',this.instance(id).version) }
+  versionMetadataPath(id) { const i=this.instance(id);return path.join(this.versionDirectory(id),i.layout==='standard'?i.version+'.json':'version.json') }
+  versionClientPath(id) { const i=this.instance(id);return path.join(this.versionDirectory(id),i.layout==='standard'?i.version+'.jar':'client.jar') }
   create(input) {
     const version = assertText(input.version)
-    if (!/^[\w.+-]{1,80}$/.test(version)) throw new Error('版本无效 / Invalid version')
+    if (!/^[\w.+-]{1,80}$/.test(version) || ['.','..'].includes(version)) throw new Error('版本无效 / Invalid version')
     const loader = input.loader || 'vanilla'
     if (!['vanilla', 'fabric', 'quilt', 'forge', 'neoforge'].includes(loader)) throw new Error('加载器无效 / Invalid loader')
     if(input.loaderVersion && !/^[\w.+-]{1,80}$/.test(input.loaderVersion))throw Error('加载器版本无效')
-    const instance = { id: randomUUID(), name: assertText(input.name), version, loader, loaderVersion: input.loaderVersion || '',
+    inside(this.root,version)
+    const stem=(loader==='vanilla'?version:version+'-'+loader+(input.loaderVersion?'-'+input.loaderVersion:'')).slice(0,140)
+    let directoryName=stem,n=1
+    while(this.data.instances.some(i=>i.directoryName?.toLowerCase()===directoryName.toLowerCase()) || existsSync(path.join(this.root,'versions',directoryName)))directoryName=stem+'-'+(++n)
+    const instance = { layout:'standard',directoryName, id: randomUUID(), name: assertText(input.name), version, loader, loaderVersion: input.loaderVersion || '',
       isolated: !!input.isolated, memory: 4096, javaPath: '', status: 'new', versionId: '', createdAt: Date.now(), lastPlayed: null, playTime: 0,
       coverMode: 'inherit', cover: '', coverImage: '', installed: [] }
     this.data.instances.push(instance)
     this.data.selectedId = instance.id
+    mkdirSync(this.profileDirectory(instance.id), { recursive: true })
     mkdirSync(this.directory(instance.id), { recursive: true })
     for (const folder of ['mods', 'resourcepacks', 'shaderpacks', 'saves', 'screenshots', 'config']) mkdirSync(path.join(this.directory(instance.id), folder), { recursive: true })
     this.save()

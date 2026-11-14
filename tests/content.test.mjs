@@ -4,7 +4,8 @@ import path from 'node:path'
 import os from 'node:os'
 import AdmZip from 'adm-zip'
 import {Store} from '../electron/store.mjs'
-import {inspectPack,exportPack,unpackPack} from '../electron/packs.mjs'
+import {inspectPack,exportPack} from '../electron/packs.mjs'
+import {inspectArchive,importArchive} from '../electron/archive-import.mjs'
 import {resolveContent,installContent,searchContent,versions as projectVersions,packCompatible,compatible} from '../electron/content.mjs'
 import {createHash} from 'node:crypto'
 const root=await mkdtemp(path.join(os.tmpdir(),'chenmeng-test-')),store=new Store(root)
@@ -16,8 +17,7 @@ await exportPack(store,instance,['config'],exported,{progress(){}})
 const pack=inspectPack(exported)
 assert(pack.zip.getEntry('overrides/config/sample.txt'))
 assert(!pack.zip.getEntry('overrides/saves/excluded.txt'))
-const next=store.create({name:'imported',version:'1.21.1',isolated:true})
-await unpackPack(store,next,pack,{progress(){}})
+const next=await importArchive(store,exported,await inspectArchive(exported),{signal:new AbortController().signal,progress(){}})
 assert.equal(await readFile(path.join(store.directory(next.id),'config/sample.txt'),'utf8'),'config')
 const bad=new AdmZip();bad.addFile('modrinth.index.json',Buffer.from(JSON.stringify({formatVersion:1,game:'minecraft',name:'bad',dependencies:{minecraft:'1.21.1'},files:[{path:'../escape.jar'}]})))
 const badPath=path.join(root,'bad.mrpack');await writeFile(badPath,bad.toBuffer())

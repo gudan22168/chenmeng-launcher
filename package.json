@@ -1,7 +1,7 @@
 {
   "name": "chenmeng-launcher",
   "productName": "尘梦启动器",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "每个世界，一页梦境。A paper and watercolor Minecraft Java launcher.",
   "type": "module",
@@ -15,7 +15,7 @@
     "start": "electron .",
     "test": "node --test tests/*.test.mjs",
     "test:ui": "node scripts/ui-test.mjs",
-    "pack": "npm run build && electron-builder --win portable --x64",
+    "pack": "npm run build && electron-builder --win portable zip --x64",
     "pack:dir": "npm run build && electron-builder --win --dir --x64"
   },
   "dependencies": {
@@ -25,6 +25,7 @@
     "@xmcl/unzip": "2.1.2",
     "adm-zip": "^0.5.16",
     "lucide-vue-next": "^0.468.0",
+    "node-unrar-js": "2.0.2",
     "vue": "^3.5.0"
   },
   "devDependencies": {
@@ -45,7 +46,8 @@
       "dist/**/*",
       "electron/**/*",
       "package.json",
-      "LICENSE"
+      "LICENSE",
+      "THIRD-PARTY-NOTICES.txt"
     ],
     "asar": true,
     "win": {

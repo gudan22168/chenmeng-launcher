@@ -27,7 +27,16 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - run: npx --no-install electron-builder --win portable --x64 --publish never --config.electronDist=node_modules/electron/dist
+      - run: npx --no-install electron-builder --win portable zip --x64 --publish never --config.electronDist=node_modules/electron/dist
+      - name: Verify packaged archive imports
+        shell: pwsh
+        run: |
+          node scripts/archive-smoke.mjs "release/win-unpacked/尘梦启动器.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/archive-smoke.mjs "release/win-unpacked/尘梦启动器.exe" --rar
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/archive-smoke.mjs "release/win-unpacked/尘梦启动器.exe" --rar --picker
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Publish tested release and checksum
         run: node scripts/publish-release.mjs
         env:
@@ -38,5 +47,6 @@ jobs:
           name: release-build-${{ github.run_number }}
           path: |
             release/*.exe
+            release/*.zip
             release/SHA256SUMS.txt
           if-no-files-found: ignore
